@@ -1,0 +1,476 @@
+package rules.forward;
+
+import com.ftn.sbnz.model.apartment.Apartment;
+import com.ftn.sbnz.model.apartment.Building;
+import com.ftn.sbnz.model.apartment.Room;
+import com.ftn.sbnz.model.apartment.KitchenWall;
+import com.ftn.sbnz.model.apartment.Violation;
+import com.ftn.sbnz.model.apartment.Warning;
+import com.ftn.sbnz.model.apartment.BuyerProfile;
+import com.ftn.sbnz.model.apartment.BuyerProfileType;
+import com.ftn.sbnz.model.apartment.ApartmentStructure;
+import com.ftn.sbnz.model.apartment.ComfortClass;
+import com.ftn.sbnz.model.apartment.RoomType;
+import com.ftn.sbnz.model.apartment.Recommendation;
+
+// =============================================================================
+// LEVEL 6 – Personalizovana preporuka za profil kupca
+//
+// Sva pravila imaju salience <= -110 da se izvršavaju nakon što Nivo 5
+// dodelli klasu komfora.
+//
+// Guard "not Recommendation()" u pravilima 6.1–6.8 sprečava dupliranje.
+// Pravila 6.9–6.12 rade s već umetnutim Recommendation faktom.
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.1: Preporučeno za samca
+// Struktura: garsonjera / jednosobni / jednoiposobni; klasa ≥ C
+// -----------------------------------------------------------------------------
+rule "6.1 Recommended for single person"
+    salience -110
+    when
+        $a : Apartment(
+            comfortClass != null,
+            comfortClass != ComfortClass.D,
+            structure != null,
+            structure in (
+                ApartmentStructure.STUDIO,
+                ApartmentStructure.ONE_ROOM,
+                ApartmentStructure.ONE_AND_A_HALF_ROOM
+            )
+        )
+        $p : BuyerProfile(type == BuyerProfileType.SINGLE)
+        not Violation(critical == true)
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation(
+            "PREPORUCENO",
+            "Stan odgovara profilu SAMAC. Struktura " + $a.getStructure() +
+            " idealna je za jednu osobu — niski troškovi održavanja i režija. " +
+            "Klasa komfora: " + $a.getComfortClass() + ".",
+            0.0
+        );
+        insert(rec);
+        System.out.println("[6.1] PREPORUCENO za SAMAC — " + $a.getStructure()
+            + " klasa " + $a.getComfortClass());
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.2: Preporučeno za mladi par
+// Struktura: jednoiposobni / dvosobni / dvoiposobni; klasa ≥ B; postoji lift;
+// dnevna soba nema prozor prema sjeveru
+// -----------------------------------------------------------------------------
+rule "6.2 Recommended for couple"
+    salience -110
+    when
+        $a : Apartment(
+            comfortClass in (ComfortClass.A, ComfortClass.B),
+            structure != null,
+            structure in (
+                ApartmentStructure.ONE_AND_A_HALF_ROOM,
+                ApartmentStructure.TWO_ROOM,
+                ApartmentStructure.TWO_AND_A_HALF_ROOM
+            )
+        )
+        $b : Building(hasElevator == true)
+        $p : BuyerProfile(type == BuyerProfileType.COUPLE)
+        $lr : Room(type == RoomType.LIVING_ROOM, $lrId : id)
+        not Violation(critical == true)
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation(
+            "PREPORUCENO",
+            "Stan odgovara profilu MLADI PAR. Struktura " + $a.getStructure() +
+            " pruža dovoljan prostor za dvoje uz potencijal za dolazak prvog deteta. " +
+            "Postoji lift. Klasa komfora: " + $a.getComfortClass() + ".",
+            0.0
+        );
+        insert(rec);
+        System.out.println("[6.2] PREPORUCENO za COUPLE — " + $a.getStructure());
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.3: Preporučeno za mladu porodicu
+// Struktura: dvoiposobni / trosobni / troiposobni; klasa ≥ B; lift;
+// modularna kuhinja; spavaće sobe nisu uz prometnu ulicu
+// -----------------------------------------------------------------------------
+rule "6.3 Recommended for young family"
+    salience -110
+    when
+        $a : Apartment(
+            comfortClass in (ComfortClass.A, ComfortClass.B),
+            structure != null,
+            structure in (
+                ApartmentStructure.TWO_AND_A_HALF_ROOM,
+                ApartmentStructure.THREE_ROOM,
+                ApartmentStructure.THREE_AND_A_HALF_ROOM
+            )
+        )
+        $b : Building(hasElevator == true)
+        $p : BuyerProfile(type == BuyerProfileType.YOUNG_FAMILY)
+        exists KitchenWall(modular30 == true || modular60 == true)
+        not Room(type == RoomType.BEDROOM, facesNoisyStreet == true)
+        not Violation(critical == true)
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation(
+            "PREPORUCENO",
+            "Stan odgovara profilu MLADA PORODICA. Struktura " + $a.getStructure() +
+            " omogućava posebnu dečju sobu uz bezbednu zonu privatnosti. " +
+            "Kuhinja je modularna. Spavaće sobe nisu uz prometnu ulicu. " +
+            "Postoji lift. Klasa komfora: " + $a.getComfortClass() + ".",
+            0.0
+        );
+        insert(rec);
+        System.out.println("[6.3] PREPORUCENO za YOUNG_FAMILY — " + $a.getStructure());
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.4: Preporučeno za porodicu 4+
+// Struktura: trosobni / troiposobni / četvorosobni / četvoroiposobni;
+// klasa = A; lift; ≥ 3 spavaće sobe; dnevna ≥ 20 m²
+// -----------------------------------------------------------------------------
+rule "6.4 Recommended for large family"
+    salience -110
+    when
+        $a : Apartment(
+            comfortClass == ComfortClass.A,
+            structure != null,
+            structure in (
+                ApartmentStructure.THREE_ROOM,
+                ApartmentStructure.THREE_AND_A_HALF_ROOM,
+                ApartmentStructure.FOUR_ROOM,
+                ApartmentStructure.FOUR_AND_A_HALF_ROOM
+            )
+        )
+        $b : Building(hasElevator == true)
+        $p : BuyerProfile(type in (BuyerProfileType.FAMILY, BuyerProfileType.LARGE_FAMILY))
+        $bedroomCount : Number(intValue >= 3) from accumulate(
+            Room(type == RoomType.BEDROOM, bedroomCapacity > 0),
+            count(1)
+        )
+        exists Room(type == RoomType.LIVING_ROOM, area >= 20.0)
+        not Violation(critical == true)
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation(
+            "PREPORUCENO",
+            "Stan odgovara profilu PORODICA 4+. Struktura " + $a.getStructure() +
+            " sa " + $bedroomCount + " spavaćih soba i dnevnom sobom ≥ 20 m². " +
+            "Postoji lift. Klasa komfora: A.",
+            0.0
+        );
+        insert(rec);
+        System.out.println("[6.4] PREPORUCENO za FAMILY/LARGE_FAMILY — "
+            + $a.getStructure() + " (" + $bedroomCount + " spavacih)");
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.5: Preporučeno za stariju osobu
+// Postoji lift; kupatilo ima dovoljno površine; klasa ≥ B
+// -----------------------------------------------------------------------------
+rule "6.5 Recommended for retiree"
+    salience -110
+    when
+        $a : Apartment(
+            comfortClass in (ComfortClass.A, ComfortClass.B)
+        )
+        $b : Building(hasElevator == true)
+        $p : BuyerProfile(type == BuyerProfileType.RETIREE)
+        exists Room(type == RoomType.BATHROOM, area >= 3.0)
+        not Violation(critical == true)
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation(
+            "PREPORUCENO",
+            "Stan odgovara profilu STARIJA OSOBA. Postoji lift — ključna prednost pristupačnosti. " +
+            "Kupatilo ima dovoljno prostora za nesmetano kretanje. " +
+            "Klasa komfora: " + $a.getComfortClass() + ".",
+            0.0
+        );
+        insert(rec);
+        System.out.println("[6.5] PREPORUCENO za RETIREE — klasa " + $a.getComfortClass());
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.6: Preporučeno za investitora
+// Struktura: garsonjera / jednosobni / dvosobni; modularna kuhinja;
+// postoji parking; nema kritičnih prekršaja
+// -----------------------------------------------------------------------------
+rule "6.6 Recommended for investor"
+    salience -110
+    when
+        $a : Apartment(
+            comfortClass != null,
+            comfortClass != ComfortClass.D,
+            structure != null,
+            structure in (
+                ApartmentStructure.STUDIO,
+                ApartmentStructure.ONE_ROOM,
+                ApartmentStructure.TWO_ROOM
+            )
+        )
+        $b : Building(hasParking == true)
+        $p : BuyerProfile(type == BuyerProfileType.INVESTOR)
+        exists KitchenWall(modular30 == true || modular60 == true)
+        not Violation(critical == true)
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation(
+            "PREPORUCENO",
+            "Stan odgovara profilu INVESTITOR. Struktura " + $a.getStructure() +
+            " ima najveću potražnju za izdavanjem (garsonjere, jednosobni i dvosobni). " +
+            "Kuhinja je modularna. Parking postoji. Nema kritičnih prekršaja. " +
+            "Klasa komfora: " + $a.getComfortClass() + ".",
+            0.0
+        );
+        insert(rec);
+        System.out.println("[6.6] PREPORUCENO za INVESTOR — " + $a.getStructure());
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.7: Uslovno preporučeno
+// Profil postoji; klasa nije D; nema kritičnih prekršaja;
+// 1–2 popravljiva prekršaja (estimatedRepairCost > 0)
+// Pali se samo ako nijedno PREPORUCENO pravilo nije generisalo preporuku
+// -----------------------------------------------------------------------------
+rule "6.7 Conditionally recommended"
+    salience -120
+    when
+        $a : Apartment(comfortClass != null, comfortClass != ComfortClass.D)
+        $p : BuyerProfile()
+        not Violation(critical == true)
+        $fixableCount : Number(intValue >= 1, intValue <= 2) from accumulate(
+            Violation(estimatedRepairCost > 0),
+            count(1)
+        )
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation(
+            "USLOVNO_PREPORUCENO",
+            "Stan uslovno odgovara profilu kupca. Postoje " + $fixableCount +
+            " popravljiv(ih) prekršaj(a) koje je moguće otkloniti uz dodatni trošak. " +
+            "Preporučujemo pregovor o cieni na osnovu procenjenih troškova popravki. " +
+            "Klasa komfora: " + $a.getComfortClass() + ".",
+            0.0
+        );
+        insert(rec);
+        System.out.println("[6.7] USLOVNO_PREPORUCENO — " + $fixableCount + " popravljivih prekrsaja");
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.8: Nije preporučeno
+// Pali se kao catch-all ako nijedno prethodno pravilo nije generisalo preporuku
+// (klasa D, kritični prekršaj, ili struktura uopšte ne odgovara profilu)
+// -----------------------------------------------------------------------------
+rule "6.8 Not recommended"
+    salience -130
+    when
+        $a : Apartment(comfortClass != null)
+        $p : BuyerProfile()
+        not Recommendation()
+    then
+        String reason = "";
+        if ($a.getComfortClass() == ComfortClass.D) {
+            reason = "Stan ima klasu komfora D zbog kritičnog prekršaja Pravilnika. ";
+        }
+        Recommendation rec = new Recommendation(
+            "NEPREPORUCENO",
+            "Stan NIJE preporučen za ovaj profil kupca. " + reason +
+            "Postoje ozbiljni nedostaci koji se ne mogu lako otkloniti ili " +
+            "struktura stana ne odgovara minimalnim zahtevima profila.",
+            0.0
+        );
+        insert(rec);
+        System.out.println("[6.8] NEPREPORUCENO — klasa " + $a.getComfortClass());
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.9: Generisanje argumenata za pregovor o ceni
+// Sabira procenjene troškove popravljivih prekršaja + 10% rezerve
+// Pali se samo kad postoji preporuka PREPORUCENO ili USLOVNO_PREPORUCENO
+// i bar jedan prekršaj s troškom popravke
+// -----------------------------------------------------------------------------
+rule "6.9 Price negotiation arguments"
+    salience -140
+    when
+        $a : Apartment()
+        exists Recommendation(code == "PREPORUCENO" || code == "USLOVNO_PREPORUCENO")
+        $totalCost : Number(doubleValue > 0) from accumulate(
+            $v : Violation(estimatedRepairCost > 0),
+            sum($v.getEstimatedRepairCost())
+        )
+    then
+        double total = $totalCost.doubleValue();
+        double withReserve = Math.round(total * 1.10);
+        Recommendation negotiation = new Recommendation(
+            "PREGOVOR_O_CENI",
+            "Na osnovu procenjenih troškova popravljivih nedostataka (" +
+                String.format("%.0f", total) + " EUR), preporučujemo da zahtevate " +
+                "sniženje ciene od " + String.format("%.0f", withReserve) + " EUR " +
+                "(uključuje 10% rezerve za nepredviđene troškove).",
+            withReserve
+        );
+        insert(negotiation);
+        System.out.println("[6.9] Pregovor o cieni: troškovi " + total
+            + " EUR → preporučeno sniženje " + withReserve + " EUR");
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.10a: Rampa kao prednost za stariju osobu
+// Ako je preporuka USLOVNO_PREPORUCENO, podiže je na PREPORUCENO.
+// Guard "not Warning(code == CHILDREN_PRIVACY_ISSUE)" sprečava da 6.10b
+// beskonačno nadglasava 6.12.
+// -----------------------------------------------------------------------------
+rule "6.10a Ramp advantage for elderly"
+    salience -150
+    when
+        $b : Building(accessible == true)
+        $p : BuyerProfile(type == BuyerProfileType.RETIREE)
+        $rec : Recommendation(code == "USLOVNO_PREPORUCENO")
+    then
+        modify($rec) {
+            setCode("PREPORUCENO"),
+            setDescription($rec.getDescription() +
+                " BONUS: Zgrada ima pristupačnu rampu (čl. 5 Sl. glasnik RS 22/2015) — " +
+                "ključna prednost za stariju osobu (lakši pristup bez stepenika). " +
+                "Preporuka podignuta na PREPORUČENO.")
+        };
+        System.out.println("[6.10a] Rampa bonus — preporuka podignuta na PREPORUCENO za RETIREE");
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.10b: Rampa kao prednost za porodicu s malom djecom (kolica, ≤ 5 god)
+// Guard "not Warning(code == CHILDREN_PRIVACY_ISSUE)" sprečava petlju sa 6.12:
+// kada 6.12 utvrdi da nema dovoljno soba, 6.10b više ne smije nadglasati tu odluku.
+// -----------------------------------------------------------------------------
+rule "6.10b Ramp advantage for young family with stroller"
+    salience -150
+    when
+        $b : Building(accessible == true)
+        $p : BuyerProfile(
+            type in (BuyerProfileType.YOUNG_FAMILY, BuyerProfileType.FAMILY, BuyerProfileType.LARGE_FAMILY),
+            hasChildren == true,
+            youngestChildAge <= 5
+        )
+        $rec : Recommendation(code == "USLOVNO_PREPORUCENO")
+        not Warning(code == "CHILDREN_PRIVACY_ISSUE")
+    then
+        modify($rec) {
+            setCode("PREPORUCENO"),
+            setDescription($rec.getDescription() +
+                " BONUS: Zgrada ima pristupačnu rampu — nesmetan ulazak sa dječijim kolicima " +
+                "(najmlađe dijete ≤ 5 godina). Preporuka podignuta na PREPORUČENO.")
+        };
+        System.out.println("[6.10b] Rampa bonus — preporuka podignuta na PREPORUCENO za porodicu s malim djetetom");
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.11: Deca različitog pola — svako dete dobija svoju sobu (BONUS)
+// Broj spavaćih (minus roditeljska) >= broj dece
+// Guard sprečava dvostruko paljenje.
+// -----------------------------------------------------------------------------
+rule "6.11 Mixed gender children - enough rooms"
+    salience -160
+    when
+        $a : Apartment()
+        $p : BuyerProfile(
+            $numChildren : numberOfChildren,
+            numberOfChildren >= 2,
+            hasMixedGenderChildren == true,
+            type in (BuyerProfileType.YOUNG_FAMILY, BuyerProfileType.FAMILY, BuyerProfileType.LARGE_FAMILY)
+        )
+        $totalBedrooms : Number() from accumulate(
+            Room(type == RoomType.BEDROOM, bedroomCapacity > 0),
+            count(1)
+        )
+        eval($totalBedrooms.intValue() - 1 >= $numChildren)
+        not Warning(code == "CHILDREN_PRIVACY_BONUS")
+    then
+        Warning w = new Warning(
+            "CHILDREN_PRIVACY_BONUS",
+            null,
+            "BONUS KOMFOR PRIVATNOSTI: Svako dijete (" + $numChildren + ") dobija svoju sobu " +
+            "(ukupno " + $totalBedrooms + " spavaćih soba). " +
+            "Posebno važno za djecu različitog pola u tinejdžerskom uzrastu. " +
+            "Stan je izuzetan po pitanju privatnosti.",
+            0.0
+        );
+        insert(w);
+        System.out.println("[6.11] BONUS — svako dijete ima vlastitu sobu ("
+            + $totalBedrooms + " spavacih, " + $numChildren + " djece)");
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.12: Deca različitog pola — nedovoljno soba (UPOZORENJE)
+// Spušta preporuku PREPORUCENO → USLOVNO_PREPORUCENO.
+// Guard "not Warning(code == CHILDREN_PRIVACY_ISSUE)" sprečava petlju:
+// kada upozorenje jednom uđe u radnu memoriju, pravilo se više ne pali.
+// -----------------------------------------------------------------------------
+rule "6.12 Mixed gender children - not enough rooms"
+    salience -160
+    when
+        $a : Apartment()
+        $p : BuyerProfile(
+            $numChildren : numberOfChildren,
+            numberOfChildren >= 2,
+            hasMixedGenderChildren == true,
+            type in (BuyerProfileType.YOUNG_FAMILY, BuyerProfileType.FAMILY, BuyerProfileType.LARGE_FAMILY)
+        )
+        $totalBedrooms : Number() from accumulate(
+            Room(type == RoomType.BEDROOM, bedroomCapacity > 0),
+            count(1)
+        )
+        eval($totalBedrooms.intValue() - 1 < $numChildren)
+        $rec : Recommendation(code == "PREPORUCENO" || code == "USLOVNO_PREPORUCENO")
+        not Warning(code == "CHILDREN_PRIVACY_ISSUE")
+    then
+        int childRooms = $totalBedrooms.intValue() - 1;
+        Warning w = new Warning(
+            "CHILDREN_PRIVACY_ISSUE",
+            null,
+            "UPOZORENJE: Deca različitog pola (" + $numChildren + " dece) morala bi da dele sobu " +
+            "(" + childRooms + " dečijih soba za " + $numChildren + " dece). " +
+            "Potencijalni problem privatnosti u tinejdžerskom uzrastu. " +
+            "Razmotrite stan s većim brojem spavaćih soba.",
+            0.0
+        );
+        insert(w);
+        modify($rec) {
+            setCode("USLOVNO_PREPORUCENO"),
+            setDescription($rec.getDescription() +
+                " UPOZORENJE: Nedovoljno spavaćih soba za decu različitog pola (" +
+                childRooms + " soba, " + $numChildren + " dece) — preporuka snižena.")
+        };
+        System.out.println("[6.12] UPOZORENJE — nedovoljno soba za decu razlicitog pola ("
+            + childRooms + " decijih vs " + $numChildren + " dece)");
+end
+
+
+// -----------------------------------------------------------------------------
+// Pravilo 6.X: Finalni rezime preporuke
+// -----------------------------------------------------------------------------
+rule "6.X Final recommendation summary"
+    salience -200
+    when
+        $a : Apartment()
+        $rec : Recommendation(code != "PREGOVOR_O_CENI")
+    then
+        System.out.println("[6.X] === FINALNA PREPORUKA: " + $rec.getCode()
+            + " | Klasa komfora: " + $a.getComfortClass()
+            + " | Struktura: " + $a.getStructure() + " ===");
+end

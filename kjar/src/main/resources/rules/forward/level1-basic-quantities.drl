@@ -1,0 +1,220 @@
+package rules.forward;
+
+import com.ftn.sbnz.model.apartment.Apartment;
+import com.ftn.sbnz.model.apartment.Room;
+import com.ftn.sbnz.model.apartment.Window;
+import com.ftn.sbnz.model.apartment.KitchenWall;
+import com.ftn.sbnz.model.apartment.DeadArea;
+import com.ftn.sbnz.model.apartment.Warning;
+import com.ftn.sbnz.model.apartment.RoomType;
+import com.ftn.sbnz.model.apartment.Orientation;
+
+// LEVEL 1 - Derivation of basic quantities
+
+// -----------------------------------------------------------------------------
+// Rule 1.1: Calculate room area
+// IF a room has a defined length and width and area is not yet calculated,
+// THEN compute area = length * width.
+// -----------------------------------------------------------------------------
+rule "1.1 Calculate room area"
+    when
+        $r : Room(
+            length > 0,
+            width > 0,
+            area == 0.0
+        )
+    then
+        double computedArea = $r.getLength() * $r.getWidth();
+        modify($r) { setArea(computedArea) };
+        System.out.println("[1.1] Room " + $r.getId() + " (" + $r.getType()
+            + ") area = " + computedArea + " m2");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 1.2: Window-to-floor ratio per room
+// IF a room has a calculated area and contains one or more windows,
+// THEN sum the glazed areas of all its windows and store on the room.
+// -----------------------------------------------------------------------------
+rule "1.2 Sum glazed areas per room"
+    when
+        $r : Room(
+            area > 0,
+            totalGlazedArea == 0.0
+        )
+        $sumGlass : Number(doubleValue > 0) from accumulate(
+            $w : Window(roomId == $r.getId(), glazedArea > 0),
+            sum($w.getGlazedArea())
+        )
+    then
+        modify($r) { setTotalGlazedArea($sumGlass.doubleValue()) };
+        double ratio = $sumGlass.doubleValue() / $r.getArea();
+        System.out.println("[1.2] Room " + $r.getId()
+            + " total glazed area = " + $sumGlass + " m2"
+            + ", glass/floor ratio = " + String.format("%.3f", ratio));
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 1.3: Kitchen wall modularity
+// IF a kitchen wall has length L (cm),
+// THEN mark as modular60 if L is divisible by 60,
+// modular30 if L is divisible by 30 (but not 60),
+// otherwise mark as nonModular.
+// -----------------------------------------------------------------------------
+rule "1.3a Modular wall 60 cm"
+    when
+        $w : KitchenWall(
+            lengthCm > 0,
+            lengthCm % 60 == 0,
+            modular60 == false
+        )
+    then
+        modify($w) {
+            setModular60(true),
+            setModular30(true),
+            setNonModular(false)
+        };
+        System.out.println("[1.3a] Wall " + $w.getId() + " (" + $w.getLengthCm()
+            + " cm) is MODULAR 60");
+end
+
+rule "1.3b Modular wall 30 cm (but not 60)"
+    when
+        $w : KitchenWall(
+            lengthCm > 0,
+            lengthCm % 30 == 0,
+            lengthCm % 60 != 0,
+            modular30 == false
+        )
+    then
+        modify($w) {
+            setModular30(true),
+            setModular60(false),
+            setNonModular(false)
+        };
+        System.out.println("[1.3b] Wall " + $w.getId() + " (" + $w.getLengthCm()
+            + " cm) is MODULAR 30");
+end
+
+rule "1.3c Non-modular wall"
+    when
+        $w : KitchenWall(
+            lengthCm > 0,
+            lengthCm % 30 != 0,
+            nonModular == false
+        )
+    then
+        modify($w) {
+            setNonModular(true),
+            setModular30(false),
+            setModular60(false)
+        };
+        System.out.println("[1.3c] Wall " + $w.getId() + " (" + $w.getLengthCm()
+            + " cm) is NON-MODULAR");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 1.4: Dead area detection - narrow corridor
+// IF a HALLWAY room has width < 90 cm,
+// THEN its entire area is effectively dead/unusable space.
+// (Niches and sharp angles are pre-provided as DeadArea input facts.)
+// -----------------------------------------------------------------------------
+rule "1.4 Narrow corridor dead area"
+    when
+        $r : Room(
+            type == RoomType.HALLWAY,
+            width > 0,
+            width < 0.90,
+            area > 0
+        )
+        not DeadArea(roomId == $r.getId())
+    then
+        DeadArea da = new DeadArea(
+            $r.getId(),
+            $r.getArea(),
+            "Narrow corridor (width " + String.format("%.0f", $r.getWidth() * 100) + " cm < 90 cm)"
+        );
+        insert(da);
+        System.out.println("[1.4] DEAD AREA in corridor " + $r.getId()
+            + " (width=" + String.format("%.0f", $r.getWidth() * 100) + " cm): "
+            + $r.getArea() + " m2");
+end
+
+rule "1.4b Narrow corridor warning"
+    when
+        $r : Room(
+            type == RoomType.HALLWAY,
+            width > 0,
+            width < 0.90
+        )
+    then
+        Warning w = new Warning(
+            "NARROW_CORRIDOR",
+            $r.getId(),
+            "Corridor width " + String.format("%.0f", $r.getWidth() * 100)
+                + " cm is below the recommended 90 cm minimum - space is practically unusable",
+            0.0
+        );
+        insert(w);
+        System.out.println("[1.4b] WARNING " + w);
+end
+
+// -----------------------------------------------------------------------------
+// Rule 1.5: Total net usable area of the apartment
+// Sum the areas of ALL useful rooms (living, bedroom, kitchen, bathroom,
+// toilet, hallway, storage). Excludes balconies, loggias, entrance lobby.
+// -----------------------------------------------------------------------------
+rule "1.5 Total net usable area"
+    when
+        $a : Apartment(totalNetUsableArea == 0.0)
+        $total : Number(doubleValue > 0) from accumulate(
+            $r : Room(
+                area > 0,
+                type in (
+                    RoomType.LIVING_ROOM,
+                    RoomType.BEDROOM,
+                    RoomType.KITCHEN,
+                    RoomType.BATHROOM,
+                    RoomType.TOILET,
+                    RoomType.HALLWAY,
+                    RoomType.STORAGE
+                )
+            ),
+            sum($r.getArea())
+        )
+    then
+        modify($a) { setTotalNetUsableArea($total.doubleValue()) };
+        System.out.println("[1.5] Apartment " + $a.getId()
+            + " total net usable area = " + $total + " m2");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 1.6: Detect cross ventilation
+// Apartment has cross ventilation if windows exist on at least two opposite
+// facades: NORTH-SOUTH or EAST-WEST.
+// -----------------------------------------------------------------------------
+rule "1.6a Cross ventilation NORTH-SOUTH"
+    when
+        $a : Apartment(crossVentilation == false)
+        exists Window(orientation == Orientation.NORTH)
+        exists Window(orientation == Orientation.SOUTH)
+    then
+        modify($a) { setCrossVentilation(true) };
+        System.out.println("[1.6a] Apartment " + $a.getId()
+            + " has cross ventilation (north-south)");
+end
+
+
+rule "1.6b Cross ventilation EAST-WEST"
+    when
+        $a : Apartment(crossVentilation == false)
+        exists Window(orientation == Orientation.EAST)
+        exists Window(orientation == Orientation.WEST)
+    then
+        modify($a) { setCrossVentilation(true) };
+        System.out.println("[1.6b] Apartment " + $a.getId()
+            + " has cross ventilation (east-west)");
+end

@@ -1,0 +1,28 @@
+package com.ftn.sbnz.model.apartment;
+
+import lombok.Data;
+import java.util.ArrayList;
+import java.util.List;
+
+@Data
+public class Apartment {
+
+    private String id;
+
+    private List<Room> rooms = new ArrayList<>();
+    private List<Window> windows = new ArrayList<>();
+    private List<KitchenWall> kitchenWalls = new ArrayList<>();
+    private List<DeadArea> deadAreas = new ArrayList<>();
+
+    private double totalNetUsableArea;
+    private boolean crossVentilation;
+    private ApartmentStructure structure;
+
+    private int floor;
+    private int terraceRailingHeightCm;
+    private boolean cornerApartment;
+    private boolean topFloor;
+    private boolean roofInsulated;
+
+    private ComfortClass comfortClass;
+}

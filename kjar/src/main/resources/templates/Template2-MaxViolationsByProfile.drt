@@ -1,0 +1,43 @@
+template header
+profileType
+maxViolations
+recommendationCode
+recommendationDesc
+
+package rules.template;
+
+import com.ftn.sbnz.model.apartment.BuyerProfile;
+import com.ftn.sbnz.model.apartment.BuyerProfileType;
+import com.ftn.sbnz.model.apartment.Violation;
+import com.ftn.sbnz.model.apartment.Recommendation;
+
+template "maxViolationsByProfile"
+
+rule "Profile @{profileType} - violation limit exceeded"
+    salience -30
+    when
+        $p : BuyerProfile(type == BuyerProfileType.@{profileType})
+        $count : Number(intValue > @{maxViolations}) from accumulate(
+            Violation(),
+            count(1)
+        )
+    then
+        Recommendation r = new Recommendation(
+            "@{recommendationCode}",
+            "@{recommendationDesc} (" + $count + " violations found, max accepted: @{maxViolations})",
+            0.0
+        );
+        insert(r);
+        System.out.println("[T2] @{profileType}: " + r);
+end
+
+end template
+
+// Data rows (profileType, maxViolations, recommendationCode, recommendationDesc):
+// SINGLE,3,NEGOTIATE,Too many violations for a single buyer - negotiate price reduction
+// COUPLE,2,NEGOTIATE,Violation count exceeds couple profile tolerance - negotiate or reconsider
+// YOUNG_FAMILY,1,AVOID,Young family should avoid apartments with multiple violations
+// FAMILY,2,NEGOTIATE,Violation count exceeds family profile tolerance - negotiate or reconsider
+// LARGE_FAMILY,1,AVOID,Large family needs a sound apartment - too many violations
+// RETIREE,0,AVOID,Retiree profile requires a violation-free apartment
+// INVESTOR,4,NEGOTIATE,High violation count even for investment - negotiate price
