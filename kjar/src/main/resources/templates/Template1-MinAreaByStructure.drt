@@ -1,0 +1,52 @@
+template header
+structure
+minArea
+
+package rules.template;
+
+import com.ftn.sbnz.model.apartment.Apartment;
+import com.ftn.sbnz.model.apartment.ApartmentStructure;
+import com.ftn.sbnz.model.apartment.Violation;
+
+template "minAreaCheck"
+
+rule "Article 20 - @{structure} minimum area"
+    salience -5
+    when
+        $a : Apartment(
+            structure == ApartmentStructure.@{structure},
+            totalNetUsableArea > 0,
+            totalNetUsableArea < @{minArea}
+        )
+    then
+        double deficit = @{minArea} - $a.getTotalNetUsableArea();
+        Violation v = new Violation(
+            "Article 20",
+            null,
+            "Apartment classified as @{structure} but area " +
+                String.format("%.1f", $a.getTotalNetUsableArea()) +
+                " m² is below the required minimum @{minArea} m²" +
+                " (deficit " + String.format("%.1f", deficit) + " m²)",
+            deficit,
+            "m2",
+            0.0,
+            false
+        );
+        insert(v);
+        System.out.println("[T1] VIOLATION Article 20 - @{structure}: area "
+            + String.format("%.1f", $a.getTotalNetUsableArea())
+            + " m² < required @{minArea} m²");
+end
+
+end template
+
+// Data rows (structure, minArea):
+// STUDIO,26.0
+// ONE_ROOM,30.0
+// ONE_AND_A_HALF_ROOM,40.0
+// TWO_ROOM,48.0
+// TWO_AND_A_HALF_ROOM,56.0
+// THREE_ROOM,64.0
+// THREE_AND_A_HALF_ROOM,77.0
+// FOUR_ROOM,86.0
+// FOUR_AND_A_HALF_ROOM,97.0

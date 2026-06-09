@@ -1,0 +1,231 @@
+package rules.forward;
+
+import com.ftn.sbnz.model.apartment.Apartment;
+import com.ftn.sbnz.model.apartment.Building;
+import com.ftn.sbnz.model.apartment.Violation;
+import com.ftn.sbnz.model.apartment.Warning;
+import com.ftn.sbnz.model.apartment.ComfortClass;
+import com.ftn.sbnz.model.apartment.DeadArea;
+import com.ftn.sbnz.model.apartment.KitchenWall;
+
+// =============================================================================
+// LEVEL 5 – Comfort class assignment (A / B / C / D)
+//
+// All rules use negative salience so they fire AFTER all Level 1-4 rules
+// have finished inserting violations and warnings.
+// The comfortClass == null guard ensures only one class-assignment rule fires.
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// Rule 5.1: Class D — at least one CRITICAL violation (salience -20)
+// Critical violations: ceiling too low (Art. 18), railing too low (Art. 31),
+// no use permit (Art. 154 ZPI).
+// -----------------------------------------------------------------------------
+rule "5.1 Comfort class D - critical violation"
+    salience -20
+    when
+        $a : Apartment(comfortClass == null)
+        exists Violation(critical == true)
+    then
+        modify($a) { setComfortClass(ComfortClass.D) };
+        System.out.println("[5.1] Apartment " + $a.getId() + " → Comfort class D (critical violation)");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 5.2: Class C — 3 or more non-critical violations, no critical (salience -21)
+// -----------------------------------------------------------------------------
+rule "5.2 Comfort class C - many violations"
+    salience -21
+    when
+        $a : Apartment(comfortClass == null)
+        not Violation(critical == true)
+        $count : Number(intValue >= 3) from accumulate(
+            Violation(),
+            count(1)
+        )
+    then
+        modify($a) { setComfortClass(ComfortClass.C) };
+        System.out.println("[5.2] Apartment " + $a.getId()
+            + " → Comfort class C (" + $count + " violations)");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 5.3: Class B — 1 or 2 non-critical violations, no critical (salience -22)
+// -----------------------------------------------------------------------------
+rule "5.3 Comfort class B - some violations"
+    salience -22
+    when
+        $a : Apartment(comfortClass == null)
+        not Violation(critical == true)
+        $count : Number(intValue >= 1, intValue <= 2) from accumulate(
+            Violation(),
+            count(1)
+        )
+    then
+        modify($a) { setComfortClass(ComfortClass.B) };
+        System.out.println("[5.3] Apartment " + $a.getId()
+            + " → Comfort class B (" + $count + " violation(s))");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 5.4: Class B — no violations but 3 or more warnings (salience -23)
+// -----------------------------------------------------------------------------
+rule "5.4 Comfort class B - many warnings"
+    salience -23
+    when
+        $a : Apartment(comfortClass == null)
+        not Violation()
+        $wCount : Number(intValue >= 3) from accumulate(
+            Warning(),
+            count(1)
+        )
+    then
+        modify($a) { setComfortClass(ComfortClass.B) };
+        System.out.println("[5.4] Apartment " + $a.getId()
+            + " → Comfort class B (" + $wCount + " warnings, 0 violations)");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 5.5: Class A — no violations, at most 2 warnings (salience -24)
+// -----------------------------------------------------------------------------
+rule "5.5 Comfort class A - no violations"
+    salience -24
+    when
+        $a : Apartment(comfortClass == null)
+        not Violation()
+        $wCount : Number(intValue <= 2) from accumulate(
+            Warning(),
+            count(1)
+        )
+    then
+        modify($a) { setComfortClass(ComfortClass.A) };
+        System.out.println("[5.5] Apartment " + $a.getId()
+            + " → Comfort class A (" + $wCount + " warning(s), 0 violations)");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 5.CORR-A: Korekcija klase — previše mrtve površine (salience -25)
+// AKO ukupna mrtva površina / ukupna korisna površina > 5%,
+// ONDA spusti klasu za jedan nivo (A→B, B→C, C→D).
+// no-loop sprječava beskonačno ponavljanje za isti stan.
+// -----------------------------------------------------------------------------
+rule "5.CORR-A Dead area class reduction"
+    salience -25
+    no-loop true
+    when
+        $a : Apartment(
+            comfortClass != null,
+            comfortClass != ComfortClass.D,
+            totalNetUsableArea > 0
+        )
+        $totalDead : Number(doubleValue > 0) from accumulate(
+            $da : DeadArea(),
+            sum($da.getAreaM2())
+        )
+        eval($totalDead.doubleValue() / $a.getTotalNetUsableArea() > 0.05)
+    then
+        ComfortClass current = $a.getComfortClass();
+        ComfortClass lowered = (current == ComfortClass.A) ? ComfortClass.B
+                             : (current == ComfortClass.B) ? ComfortClass.C
+                             : ComfortClass.D;
+        double ratio = ($totalDead.doubleValue() / $a.getTotalNetUsableArea()) * 100;
+        modify($a) { setComfortClass(lowered) };
+        System.out.println("[5.CORR-A] Mrtva površina " + String.format("%.1f", ratio)
+            + "% > 5% → klasa " + current + " snižena na " + lowered);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 5.CORR-B: Korekcija klase — loš energetski razred (salience -26)
+// AKO energetski razred zgrade je D ili lošiji,
+// ONDA spusti klasu za jedan nivo.
+// no-loop sprječava beskonačno ponavljanje za isti stan.
+// -----------------------------------------------------------------------------
+rule "5.CORR-B Energy class reduction"
+    salience -26
+    no-loop true
+    when
+        $a : Apartment(
+            comfortClass != null,
+            comfortClass != ComfortClass.D
+        )
+        $b : Building(
+            energyClass != null,
+            energyClass in ("D", "E", "F", "G")
+        )
+    then
+        ComfortClass current = $a.getComfortClass();
+        ComfortClass lowered = (current == ComfortClass.A) ? ComfortClass.B
+                             : (current == ComfortClass.B) ? ComfortClass.C
+                             : ComfortClass.D;
+        modify($a) { setComfortClass(lowered) };
+        System.out.println("[5.CORR-B] Energetski razred " + $b.getEnergyClass()
+            + " (D ili lošiji) → klasa " + current + " snižena na " + lowered);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 5.BONUS: Bonus — modularna kuhinja + poprečno provetravanje (salience -27)
+// AKO kuhinja je u potpunosti modularna I stan ima poprečno provetravanje
+// I klasa je B (nakon svih korekcija),
+// ONDA podigni klasu na A.
+// Pali se NAKON korekcija (salience -25, -26) pa odražava konačno stanje.
+// no-loop sprječava beskonačno ponavljanje.
+// -----------------------------------------------------------------------------
+rule "5.BONUS Modular kitchen and cross ventilation upgrade"
+    salience -27
+    no-loop true
+    when
+        $a : Apartment(
+            comfortClass == ComfortClass.B,
+            crossVentilation == true
+        )
+        exists KitchenWall(modular30 == true || modular60 == true)
+    then
+        modify($a) { setComfortClass(ComfortClass.A) };
+        System.out.println("[5.BONUS] Modularna kuhinja + poprečno provetravanje → klasa B podignuta na A");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 5.6: No cross ventilation — comfort warning (salience -15)
+// Fires independently of class assignment; cross ventilation significantly
+// affects summer comfort without AC.
+// -----------------------------------------------------------------------------
+rule "5.6 No cross ventilation"
+    salience -15
+    when
+        $a : Apartment(crossVentilation == false)
+    then
+        Warning w = new Warning(
+            "NO_CROSS_VENTILATION",
+            null,
+            "Apartment has no cross ventilation - summer comfort without AC will be poor; "
+                + "estimated extra cooling cost 200-400 EUR/year",
+            300.0
+        );
+        insert(w);
+        System.out.println("[5.6] WARNING " + w);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 5.7: Final comfort class summary (salience -100)
+// -----------------------------------------------------------------------------
+rule "5.7 Comfort class summary"
+    salience -100
+    when
+        $a : Apartment()
+        $vc : Number() from accumulate(Violation(), count(1))
+        $wc : Number() from accumulate(Warning(), count(1))
+    then
+        System.out.println("[5.7] === COMFORT CLASS: "
+            + ($a.getComfortClass() != null ? $a.getComfortClass() : "UNASSIGNED")
+            + " | violations=" + $vc + " warnings=" + $wc + " ===");
+end

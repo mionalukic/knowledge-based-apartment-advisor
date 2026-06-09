@@ -1,0 +1,125 @@
+template header
+buildingType
+minCorridorCm
+minHeightM
+minWindowRatio
+
+package rules.template;
+
+import com.ftn.sbnz.model.apartment.Building;
+import com.ftn.sbnz.model.apartment.BuildingType;
+import com.ftn.sbnz.model.apartment.Room;
+import com.ftn.sbnz.model.apartment.RoomType;
+import com.ftn.sbnz.model.apartment.Violation;
+
+// =============================================================================
+// Template 4 – Building-type-specific norms (corridor, ceiling height, window ratio)
+// Three template blocks generate 3 rules × 4 building types = 12 rules total.
+// =============================================================================
+
+
+// --- Block 1: Minimum corridor width per building type (Article 6) -----------
+template "corridorCheck"
+
+rule "Building type @{buildingType} - corridor width"
+    salience -5
+    when
+        $b : Building(
+            buildingType == BuildingType.@{buildingType},
+            corridorWidthCm > 0,
+            corridorWidthCm < @{minCorridorCm}
+        )
+    then
+        double deficit = @{minCorridorCm} - $b.getCorridorWidthCm();
+        Violation v = new Violation(
+            "Article 6",
+            null,
+            "@{buildingType} building requires corridor >= @{minCorridorCm} cm; "
+                + "actual: " + $b.getCorridorWidthCm() + " cm"
+                + " (deficit " + String.format("%.0f", deficit) + " cm)",
+            deficit,
+            "cm",
+            0.0,
+            false
+        );
+        insert(v);
+        System.out.println("[T4-corridor] VIOLATION @{buildingType}: corridor "
+            + $b.getCorridorWidthCm() + " cm < @{minCorridorCm} cm");
+end
+
+end template
+
+
+// --- Block 2: Minimum ceiling height per building type (Article 13/18) -------
+template "heightCheck"
+
+rule "Building type @{buildingType} - ceiling height"
+    salience -5
+    when
+        Building(buildingType == BuildingType.@{buildingType})
+        $r : Room(
+            type in (RoomType.LIVING_ROOM, RoomType.BEDROOM, RoomType.KITCHEN),
+            clearHeight > 0,
+            clearHeight < @{minHeightM}
+        )
+    then
+        double deficitCm = (@{minHeightM} - $r.getClearHeight()) * 100;
+        Violation v = new Violation(
+            "Article 13",
+            $r.getId(),
+            "@{buildingType} building requires ceiling height >= @{minHeightM} m; "
+                + "actual: " + String.format("%.2f", $r.getClearHeight()) + " m"
+                + " (deficit " + String.format("%.1f", deficitCm) + " cm)",
+            deficitCm,
+            "cm",
+            0.0,
+            false
+        );
+        insert(v);
+        System.out.println("[T4-height] VIOLATION @{buildingType} room "
+            + $r.getId() + ": height "
+            + String.format("%.2f", $r.getClearHeight()) + " m < @{minHeightM} m");
+end
+
+end template
+
+
+// --- Block 3: Minimum window-to-floor ratio per building type (Article 13) ---
+template "windowRatioCheck"
+
+rule "Building type @{buildingType} - window to floor ratio"
+    salience -5
+    when
+        Building(buildingType == BuildingType.@{buildingType})
+        $r : Room(
+            type in (RoomType.LIVING_ROOM, RoomType.BEDROOM, RoomType.KITCHEN),
+            area > 0,
+            totalGlazedArea / area < @{minWindowRatio}
+        )
+    then
+        double actualRatio = $r.getTotalGlazedArea() / $r.getArea();
+        double deficit = @{minWindowRatio} - actualRatio;
+        Violation v = new Violation(
+            "Article 13",
+            $r.getId(),
+            "@{buildingType} building requires window/floor ratio >= @{minWindowRatio}; "
+                + "actual: " + String.format("%.3f", actualRatio)
+                + " (deficit " + String.format("%.3f", deficit) + ")",
+            deficit,
+            "ratio",
+            0.0,
+            false
+        );
+        insert(v);
+        System.out.println("[T4-window] VIOLATION @{buildingType} room "
+            + $r.getId() + ": ratio "
+            + String.format("%.3f", actualRatio) + " < @{minWindowRatio}");
+end
+
+end template
+
+// Data rows (buildingType, minCorridorCm, minHeightM, minWindowRatio):
+// STANDARD,140,2.60,0.15
+// SOCIAL,130,2.50,0.15
+// MIXED,150,2.70,0.18
+// LUXURY,160,2.80,0.20

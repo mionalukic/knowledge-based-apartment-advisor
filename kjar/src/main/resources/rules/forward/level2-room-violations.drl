@@ -1,0 +1,370 @@
+package rules.forward;
+
+import com.ftn.sbnz.model.apartment.Apartment;
+import com.ftn.sbnz.model.apartment.Room;
+import com.ftn.sbnz.model.apartment.Window;
+import com.ftn.sbnz.model.apartment.KitchenWall;
+import com.ftn.sbnz.model.apartment.RoomType;
+import com.ftn.sbnz.model.apartment.Violation;
+import com.ftn.sbnz.model.apartment.Warning;
+
+// LEVEL 2 - Room classification and violations of articles 13, 17, 18, 19
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.1: Living room - compliant area and width
+// IF a LIVING_ROOM has area >= 16 m² AND width >= 320 cm,
+// THEN it is compliant with articles 17 and 19.
+// (No violation is inserted, but we log compliance.)
+// -----------------------------------------------------------------------------
+rule "2.1 Living room compliant"
+    when
+        $r : Room(
+            type == RoomType.LIVING_ROOM,
+            area >= 16.0,
+            width >= 3.20
+        )
+    then
+        System.out.println("[2.1] Living room " + $r.getId() + " is COMPLIANT (area="
+            + $r.getArea() + " m2, width=" + ($r.getWidth() * 100) + " cm)");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.2: Living room area below minimum (Article 19)
+// IF a LIVING_ROOM has area < 16 m²,
+// THEN register a VIOLATION of article 19; deficit = 16 - area.
+// Estimated repair cost: 0 EUR (cannot be repaired - structural issue,
+// becomes argument for price negotiation).
+// -----------------------------------------------------------------------------
+rule "2.2 Living room area below minimum"
+    when
+        $r : Room(
+            type == RoomType.LIVING_ROOM,
+            area > 0,
+            area < 16.0
+        )
+    then
+        double deficit = 16.0 - $r.getArea();
+        double percent = (deficit / 16.0) * 100;
+        Violation v = new Violation(
+            "Article 19",
+            $r.getId(),
+            "Living room area below 16 m² minimum (deficit " +
+                String.format("%.1f", percent) + "%)",
+            deficit,
+            "m2",
+            0.0,
+            false
+        );
+        insert(v);
+        System.out.println("[2.2] VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.3: Bedroom for 2 persons
+// IF a BEDROOM has area >= 11 m² AND width >= 240 cm,
+// THEN classify it as a 2-person bedroom (capacity = 2).
+// -----------------------------------------------------------------------------
+rule "2.3 Bedroom for 2 persons"
+    when
+        $r : Room(
+            type == RoomType.BEDROOM,
+            area >= 11.0,
+            width >= 2.40,
+            bedroomCapacity == 0
+        )
+    then
+        modify($r) { setBedroomCapacity(2) };
+        System.out.println("[2.3] Bedroom " + $r.getId() + " classified as 2-PERSON room");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.4: Bedroom for 1 person
+// IF a BEDROOM has area between 7 and 11 m² (or width < 240 cm),
+// AND it's not yet classified as 2-person,
+// THEN classify it as a 1-person bedroom (capacity = 1).
+// -----------------------------------------------------------------------------
+rule "2.4 Bedroom for 1 person"
+    when
+        $r : Room(
+            type == RoomType.BEDROOM,
+            area >= 7.0,
+            area < 11.0 || width < 2.40,
+            bedroomCapacity == 0
+        )
+    then
+        modify($r) { setBedroomCapacity(1) };
+        System.out.println("[2.4] Bedroom " + $r.getId() + " classified as 1-PERSON room");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.5: Bedroom below minimum (Article 19)
+// IF a BEDROOM has area < 7 m²,
+// THEN register a VIOLATION of article 19.
+// -----------------------------------------------------------------------------
+rule "2.5 Bedroom below minimum area"
+    when
+        $r : Room(
+            type == RoomType.BEDROOM,
+            area > 0,
+            area < 7.0
+        )
+    then
+        double deficit = 7.0 - $r.getArea();
+        Violation v = new Violation(
+            "Article 19",
+            $r.getId(),
+            "Bedroom area below 7 m² minimum",
+            deficit,
+            "m2",
+            0.0,
+            false
+        );
+        insert(v);
+        System.out.println("[2.5] VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.6: Kitchen compliant
+// IF a KITCHEN has area >= 4 m² AND width >= 170 cm.
+// -----------------------------------------------------------------------------
+rule "2.6 Kitchen compliant"
+    when
+        $r : Room(
+            type == RoomType.KITCHEN,
+            area >= 4.0,
+            width >= 1.70
+        )
+    then
+        System.out.println("[2.6] Kitchen " + $r.getId() + " is COMPLIANT");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.6b: Kitchen below minimum (Article 19)
+// -----------------------------------------------------------------------------
+rule "2.6b Kitchen below minimum"
+    when
+        $r : Room(
+            type == RoomType.KITCHEN,
+            area > 0,
+            area < 4.0 || width < 1.70
+        )
+    then
+        Violation v = new Violation(
+            "Article 19",
+            $r.getId(),
+            "Kitchen does not meet minimum area (4 m²) or width (170 cm)",
+            0.0,
+            "m2",
+            0.0,
+            false
+        );
+        insert(v);
+        System.out.println("[2.6b] VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.7: Bathroom compliant
+// -----------------------------------------------------------------------------
+rule "2.7 Bathroom compliant"
+    when
+        $r : Room(
+            type == RoomType.BATHROOM,
+            area >= 3.0,
+            width >= 1.60
+        )
+    then
+        System.out.println("[2.7] Bathroom " + $r.getId() + " is COMPLIANT");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.8: Bathroom without window (WARNING)
+// IF a BATHROOM has no windows at all,
+// THEN warning: mechanical ventilation required (~250 EUR).
+// -----------------------------------------------------------------------------
+rule "2.8 Bathroom without window"
+    when
+        $r : Room(
+            type == RoomType.BATHROOM
+        )
+        not Window(roomId == $r.getId())
+    then
+        Warning w = new Warning(
+            "BATHROOM_NO_WINDOW",
+            $r.getId(),
+            "Bathroom has no window - mechanical ventilation required",
+            250.0
+        );
+        insert(w);
+        System.out.println("[2.8] WARNING " + w);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.9: Poor natural light (Article 13)
+// IF the glazed area / floor area ratio is below 0.15,
+// THEN register a VIOLATION of article 13.
+// -----------------------------------------------------------------------------
+rule "2.9 Poor natural lighting"
+    when
+        $r : Room(
+            area > 0,
+            totalGlazedArea > 0,
+            type in (RoomType.LIVING_ROOM, RoomType.BEDROOM, RoomType.KITCHEN),
+            (totalGlazedArea / area) < 0.15
+        )
+    then
+        double currentRatio = $r.getTotalGlazedArea() / $r.getArea();
+        double missingGlass = (0.15 * $r.getArea()) - $r.getTotalGlazedArea();
+        // Cost: each new window installation ~150 EUR for thermal upgrade
+        double cost = 300.0;
+        Violation v = new Violation(
+            "Article 13",
+            $r.getId(),
+            "Insufficient natural light (ratio " +
+                String.format("%.3f", currentRatio) + " < 0.15)",
+            missingGlass,
+            "m2",
+            cost,
+            false
+        );
+        insert(v);
+        System.out.println("[2.9] VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.10: Room is too deep (Article 13)
+// IF room depth (length) > 3 * clearHeight,
+// THEN the back of the room won't get enough natural light.
+// -----------------------------------------------------------------------------
+rule "2.10 Room too deep"
+    when
+        $r : Room(
+            clearHeight > 0,
+            length > 0,
+            length > clearHeight * 3,
+            type in (RoomType.LIVING_ROOM, RoomType.BEDROOM)
+        )
+    then
+        Violation v = new Violation(
+            "Article 13",
+            $r.getId(),
+            "Room depth exceeds 3x ceiling height - back of room poorly lit",
+            $r.getLength() - ($r.getClearHeight() * 3),
+            "m",
+            0.0,
+            false
+        );
+        insert(v);
+        System.out.println("[2.10] VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.11: Bad proportions warning
+// IF room width < length / 2,
+// THEN warning: room too narrow / elongated, hard to arrange furniture.
+// -----------------------------------------------------------------------------
+rule "2.11 Bad room proportions"
+    when
+        $r : Room(
+            length > 0,
+            width > 0,
+            width < length / 2,
+            type in (RoomType.LIVING_ROOM, RoomType.BEDROOM)
+        )
+    then
+        Warning w = new Warning(
+            "BAD_PROPORTIONS",
+            $r.getId(),
+            "Room is too narrow/elongated (width < half length) - hard to furnish",
+            0.0
+        );
+        insert(w);
+        System.out.println("[2.11] WARNING " + w);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.12: Clear height below minimum (Article 18)
+// IF clearHeight < 2.60 m,
+// THEN register a VIOLATION of article 18.
+// -----------------------------------------------------------------------------
+rule "2.12 Clear height below minimum"
+    when
+        $r : Room(
+            clearHeight > 0,
+            clearHeight < 2.60
+        )
+    then
+        double deficit = 2.60 - $r.getClearHeight();
+        Violation v = new Violation(
+            "Article 18",
+            $r.getId(),
+            "Clear height below 2.60 m minimum",
+            deficit,
+            "m",
+            0.0,
+            true   // critical - structural issue
+        );
+        insert(v);
+        System.out.println("[2.12] CRITICAL VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.13: Custom-made kitchen warning
+// IF NO kitchen wall in the apartment is modular (neither 30 nor 60),
+// THEN warning: custom-made kitchen required (~+1000 EUR).
+// -----------------------------------------------------------------------------
+rule "2.13 Custom-made kitchen required"
+    when
+        // there exists at least one kitchen wall
+        exists KitchenWall()
+        // and there is no modular wall at all
+        not KitchenWall(modular30 == true || modular60 == true)
+    then
+        Warning w = new Warning(
+            "KITCHEN_CUSTOM_MADE",
+            null,
+            "No kitchen wall is modular - custom-made kitchen required (~+30% cost)",
+            1000.0
+        );
+        insert(w);
+        System.out.println("[2.13] WARNING " + w);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 2.14: Double bed does not fit (heuristic)
+// IF a bedroom has no wall >= 340 cm (= 160cm bed + 60cm access on each side
+// + 30cm margin on each side), THEN warn that a standard double bed may not fit.
+// Fires only after the bedroom has been classified (bedroomCapacity > 0).
+// -----------------------------------------------------------------------------
+rule "2.14 Double bed may not fit"
+    when
+        $r : Room(
+            type == RoomType.BEDROOM,
+            bedroomCapacity > 0,
+            length < 3.40,
+            width < 3.40
+        )
+    then
+        Warning w = new Warning(
+            "DOUBLE_BED_TIGHT",
+            $r.getId(),
+            "No wall >= 340 cm - standard double bed (160x200 cm) may not fit with proper access on both sides",
+            0.0
+        );
+        insert(w);
+        System.out.println("[2.14] WARNING " + w);
+end

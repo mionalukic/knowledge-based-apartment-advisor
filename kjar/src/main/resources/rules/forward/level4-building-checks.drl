@@ -1,0 +1,377 @@
+package rules.forward;
+
+import com.ftn.sbnz.model.apartment.Apartment;
+import com.ftn.sbnz.model.apartment.Building;
+import com.ftn.sbnz.model.apartment.Window;
+import com.ftn.sbnz.model.apartment.Violation;
+import com.ftn.sbnz.model.apartment.Warning;
+
+// =============================================================================
+// LEVEL 4 – Building checks (Articles 3, 5, 6, 7, 8, 31)
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// Rule 4.1: Elevator required (Article 8)
+// IF building has 4 or more above-ground floors AND no elevator,
+// THEN critical violation.
+// -----------------------------------------------------------------------------
+rule "4.1 Elevator required"
+    when
+        $b : Building(aboveGroundFloors >= 4, hasElevator == false)
+    then
+        Violation v = new Violation(
+            "Article 8", null,
+            "Building has " + $b.getAboveGroundFloors()
+                + " floors but no elevator - elevator is mandatory",
+            0.0, "", 0.0, true
+        );
+        insert(v);
+        System.out.println("[4.1] CRITICAL VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 4.2: Windbreak too narrow (Article 5)
+// Minimum windbreak width depends on total number of apartments in the building.
+// -----------------------------------------------------------------------------
+rule "4.2a Windbreak too narrow - up to 4 apartments"
+    when
+        $b : Building(
+            totalApartments > 0, totalApartments <= 4,
+            windbreakWidthCm > 0, windbreakWidthCm < 180
+        )
+    then
+        int deficit = 180 - $b.getWindbreakWidthCm();
+        Violation v = new Violation(
+            "Article 5", null,
+            "Windbreak " + $b.getWindbreakWidthCm()
+                + " cm is below the 180 cm minimum for buildings with up to 4 apartments"
+                + " (deficit " + deficit + " cm)",
+            deficit, "cm", 0.0, false
+        );
+        insert(v);
+        System.out.println("[4.2a] VIOLATION " + v);
+end
+
+rule "4.2b Windbreak too narrow - 5 to 12 apartments"
+    when
+        $b : Building(
+            totalApartments >= 5, totalApartments <= 12,
+            windbreakWidthCm > 0, windbreakWidthCm < 240
+        )
+    then
+        int deficit = 240 - $b.getWindbreakWidthCm();
+        Violation v = new Violation(
+            "Article 5", null,
+            "Windbreak " + $b.getWindbreakWidthCm()
+                + " cm is below the 240 cm minimum for buildings with 5-12 apartments"
+                + " (deficit " + deficit + " cm)",
+            deficit, "cm", 0.0, false
+        );
+        insert(v);
+        System.out.println("[4.2b] VIOLATION " + v);
+end
+
+rule "4.2c Windbreak too narrow - over 12 apartments"
+    when
+        $b : Building(
+            totalApartments > 12,
+            windbreakWidthCm > 0, windbreakWidthCm < 300
+        )
+    then
+        int deficit = 300 - $b.getWindbreakWidthCm();
+        Violation v = new Violation(
+            "Article 5", null,
+            "Windbreak " + $b.getWindbreakWidthCm()
+                + " cm is below the 300 cm minimum for buildings with over 12 apartments"
+                + " (deficit " + deficit + " cm)",
+            deficit, "cm", 0.0, false
+        );
+        insert(v);
+        System.out.println("[4.2c] VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 4.3: Horizontal corridor too narrow (Article 6)
+// -----------------------------------------------------------------------------
+rule "4.3 Corridor too narrow"
+    when
+        $b : Building(corridorWidthCm > 0, corridorWidthCm < 140)
+    then
+        int deficit = 140 - $b.getCorridorWidthCm();
+        Violation v = new Violation(
+            "Article 6", null,
+            "Horizontal corridor " + $b.getCorridorWidthCm()
+                + " cm is below the 140 cm minimum (deficit " + deficit + " cm)",
+            deficit, "cm", 0.0, false
+        );
+        insert(v);
+        System.out.println("[4.3] VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 4.4: Staircase too narrow (Article 6)
+// -----------------------------------------------------------------------------
+rule "4.4 Staircase too narrow"
+    when
+        $b : Building(staircaseWidthCm > 0, staircaseWidthCm < 120)
+    then
+        int deficit = 120 - $b.getStaircaseWidthCm();
+        Violation v = new Violation(
+            "Article 6", null,
+            "Staircase width " + $b.getStaircaseWidthCm()
+                + " cm is below the 120 cm minimum (deficit " + deficit + " cm)",
+            deficit, "cm", 0.0, false
+        );
+        insert(v);
+        System.out.println("[4.4] VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 4.5: Unacceptable stair dimensions (Article 7)
+// Tread (gaziste) < 28 cm OR riser (visina stepenika) > 18 cm.
+// -----------------------------------------------------------------------------
+rule "4.5a Stair tread too shallow"
+    when
+        $b : Building(stairTreadCm > 0, stairTreadCm < 28)
+    then
+        Violation v = new Violation(
+            "Article 7", null,
+            "Stair tread " + $b.getStairTreadCm()
+                + " cm is below the 28 cm minimum - unsafe for elderly and children",
+            28 - $b.getStairTreadCm(), "cm", 0.0, false
+        );
+        insert(v);
+        System.out.println("[4.5a] VIOLATION " + v);
+end
+
+rule "4.5b Stair riser too high"
+    when
+        $b : Building(stairRiserCm > 0, stairRiserCm > 18)
+    then
+        Violation v = new Violation(
+            "Article 7", null,
+            "Stair riser " + $b.getStairRiserCm()
+                + " cm exceeds the 18 cm maximum - unsafe for elderly and children",
+            $b.getStairRiserCm() - 18, "cm", 0.0, false
+        );
+        insert(v);
+        System.out.println("[4.5b] VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 4.6: Parking does not meet minimum dimensions (Article 3)
+// -----------------------------------------------------------------------------
+rule "4.6a Transverse parking too small"
+    when
+        $b : Building(
+            hasParking == true,
+            parkingType == "TRANSVERSE",
+            (parkingWidthCm < 230 || parkingLengthCm < 480)
+        )
+    then
+        Violation v = new Violation(
+            "Article 3", null,
+            "Transverse parking space " + $b.getParkingWidthCm() + "x" + $b.getParkingLengthCm()
+                + " cm is below the required 230x480 cm minimum",
+            0.0, "cm", 0.0, false
+        );
+        insert(v);
+        System.out.println("[4.6a] VIOLATION " + v);
+end
+
+rule "4.6b Longitudinal parking too small"
+    when
+        $b : Building(
+            hasParking == true,
+            parkingType == "LONGITUDINAL",
+            (parkingWidthCm < 200 || parkingLengthCm < 550)
+        )
+    then
+        Violation v = new Violation(
+            "Article 3", null,
+            "Longitudinal parking space " + $b.getParkingWidthCm() + "x" + $b.getParkingLengthCm()
+                + " cm is below the required 200x550 cm minimum",
+            0.0, "cm", 0.0, false
+        );
+        insert(v);
+        System.out.println("[4.6b] VIOLATION " + v);
+end
+
+rule "4.6c Garage box too small"
+    when
+        $b : Building(
+            hasParking == true,
+            parkingType == "GARAGE_BOX",
+            (parkingWidthCm < 270 || parkingLengthCm < 550)
+        )
+    then
+        Violation v = new Violation(
+            "Article 3", null,
+            "Garage box " + $b.getParkingWidthCm() + "x" + $b.getParkingLengthCm()
+                + " cm is below the required 270x550 cm minimum",
+            0.0, "cm", 0.0, false
+        );
+        insert(v);
+        System.out.println("[4.6c] VIOLATION " + v);
+end
+
+rule "4.6d Garage height too low"
+    when
+        $b : Building(
+            hasParking == true,
+            garageHeightCm > 0, garageHeightCm < 220
+        )
+    then
+        Violation v = new Violation(
+            "Article 3", null,
+            "Garage clear height " + $b.getGarageHeightCm()
+                + " cm is below the required 220 cm minimum",
+            220 - $b.getGarageHeightCm(), "cm", 0.0, false
+        );
+        insert(v);
+        System.out.println("[4.6d] VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 4.7: Ground floor privacy - low parapet (Article 31)
+// IF apartment is on floor 0 AND any window has parapet < 180 cm.
+// -----------------------------------------------------------------------------
+rule "4.7 Ground floor low parapet"
+    when
+        $a : Apartment(floor == 0)
+        $w : Window(parapetHeight > 0, parapetHeight < 1.80)
+    then
+        Violation v = new Violation(
+            "Article 31", $w.getRoomId(),
+            "Ground floor window parapet " + String.format("%.0f", $w.getParapetHeight() * 100)
+                + " cm is below the 180 cm minimum - privacy issue towards public space",
+            1.80 - $w.getParapetHeight(), "m", 150.0, false
+        );
+        insert(v);
+        System.out.println("[4.7] VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 4.8: Low terrace/balcony railing (Article 31)
+// -----------------------------------------------------------------------------
+rule "4.8a Low railing - floors 1 to 7"
+    when
+        $a : Apartment(floor > 0, floor <= 7, terraceRailingHeightCm > 0, terraceRailingHeightCm < 110)
+    then
+        Violation v = new Violation(
+            "Article 31", null,
+            "Terrace railing " + $a.getTerraceRailingHeightCm()
+                + " cm is below the 110 cm minimum for floors up to 7th (safety risk)",
+            110 - $a.getTerraceRailingHeightCm(), "cm", 0.0, true
+        );
+        insert(v);
+        System.out.println("[4.8a] CRITICAL VIOLATION " + v);
+end
+
+rule "4.8b Low railing - above floor 7"
+    when
+        $a : Apartment(floor > 7, terraceRailingHeightCm > 0, terraceRailingHeightCm < 120)
+    then
+        Violation v = new Violation(
+            "Article 31", null,
+            "Terrace railing " + $a.getTerraceRailingHeightCm()
+                + " cm is below the 120 cm minimum for floors above 7th (safety risk)",
+            120 - $a.getTerraceRailingHeightCm(), "cm", 0.0, true
+        );
+        insert(v);
+        System.out.println("[4.8b] CRITICAL VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 4.9: No use permit (Article 154 ZPI) - CRITICAL
+// -----------------------------------------------------------------------------
+rule "4.9 No use permit"
+    when
+        $b : Building(hasUsagePermit == false)
+    then
+        Violation v = new Violation(
+            "Article 154 ZPI", null,
+            "Building has no use permit - apartment cannot be registered (uknjizba), "
+                + "bank will not approve mortgage - DO NOT SIGN before permit is issued",
+            0.0, "", 0.0, true
+        );
+        insert(v);
+        System.out.println("[4.9] CRITICAL VIOLATION " + v);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 4.10: Energy class below C - warning
+// -----------------------------------------------------------------------------
+rule "4.10 Poor energy class"
+    when
+        $b : Building(
+            energyClass != null,
+            energyClass in ("D", "E", "F", "G")
+        )
+    then
+        Warning w = new Warning(
+            "POOR_ENERGY_CLASS", null,
+            "Energy class " + $b.getEnergyClass()
+                + " - estimated heating/cooling cost 30-80% higher than class C",
+            0.0
+        );
+        insert(w);
+        System.out.println("[4.10] WARNING " + w);
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 4.11a: Accessible ramp - compliant
+// IF ramp exists AND slope <= 5% AND width >= 90 cm AND has resting platforms,
+// THEN mark building as accessible.
+// -----------------------------------------------------------------------------
+rule "4.11a Ramp compliant - building accessible"
+    when
+        $b : Building(
+            hasRamp == true,
+            rampSlopePercent > 0, rampSlopePercent <= 5.0,
+            rampWidthCm >= 90,
+            hasRampRestingPlatforms == true,
+            accessible == false
+        )
+    then
+        modify($b) { setAccessible(true) };
+        System.out.println("[4.11a] Building " + $b.getId() + " marked as ACCESSIBLE");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 4.11b: Ramp exists but not compliant - warning
+// -----------------------------------------------------------------------------
+rule "4.11b Ramp not compliant"
+    when
+        $b : Building(
+            hasRamp == true,
+            accessible == false
+        )
+        not Building(
+            hasRamp == true,
+            rampSlopePercent > 0, rampSlopePercent <= 5.0,
+            rampWidthCm >= 90,
+            hasRampRestingPlatforms == true
+        )
+    then
+        Warning w = new Warning(
+            "RAMP_NOT_COMPLIANT", null,
+            "Entrance ramp exists but does not meet accessibility standards "
+                + "(Article 5, Sl. glasnik RS 22/2015): slope > 5% OR width < 90 cm OR no resting platforms",
+            0.0
+        );
+        insert(w);
+        System.out.println("[4.11b] WARNING " + w);
+end

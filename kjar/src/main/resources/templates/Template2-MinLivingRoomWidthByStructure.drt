@@ -1,0 +1,54 @@
+template header
+structure
+minWidth
+minWidthCm
+
+package rules.template;
+
+import com.ftn.sbnz.model.apartment.Apartment;
+import com.ftn.sbnz.model.apartment.ApartmentStructure;
+import com.ftn.sbnz.model.apartment.Room;
+import com.ftn.sbnz.model.apartment.RoomType;
+import com.ftn.sbnz.model.apartment.Violation;
+
+template "minLivingRoomWidthCheck"
+
+rule "Article 17 - @{structure} minimum living room width"
+    salience -5
+    when
+        $a : Apartment(structure == ApartmentStructure.@{structure})
+        $r : Room(
+            type == RoomType.LIVING_ROOM,
+            width > 0,
+            width < @{minWidth}
+        )
+    then
+        double deficitCm = (@{minWidth} - $r.getWidth()) * 100;
+        Violation v = new Violation(
+            "Article 17",
+            $r.getId(),
+            "Living room width " + String.format("%.0f", $r.getWidth() * 100)
+                + " cm is below the required @{minWidthCm} cm for @{structure} apartment"
+                + " (deficit " + String.format("%.0f", deficitCm) + " cm)",
+            deficitCm,
+            "cm",
+            0.0,
+            false
+        );
+        insert(v);
+        System.out.println("[T2] VIOLATION Article 17 - @{structure}: living room width "
+            + String.format("%.0f", $r.getWidth() * 100) + " cm < required @{minWidthCm} cm");
+end
+
+end template
+
+// Data rows (structure, minWidth in meters, minWidthCm):
+// STUDIO,3.20,320
+// ONE_ROOM,3.20,320
+// ONE_AND_A_HALF_ROOM,3.20,320
+// TWO_ROOM,3.40,340
+// TWO_AND_A_HALF_ROOM,3.40,340
+// THREE_ROOM,3.60,360
+// THREE_AND_A_HALF_ROOM,3.60,360
+// FOUR_ROOM,3.80,380
+// FOUR_AND_A_HALF_ROOnaM,3.80,380

@@ -1,0 +1,62 @@
+template header
+profileType
+minBedrooms
+elevatorCheck
+orientationCheck
+comfortClassCheck
+kitchenCheck
+
+package rules.template;
+
+import com.ftn.sbnz.model.apartment.Apartment;
+import com.ftn.sbnz.model.apartment.BuyerProfile;
+import com.ftn.sbnz.model.apartment.BuyerProfileType;
+import com.ftn.sbnz.model.apartment.Room;
+import com.ftn.sbnz.model.apartment.RoomType;
+import com.ftn.sbnz.model.apartment.Window;
+import com.ftn.sbnz.model.apartment.Orientation;
+import com.ftn.sbnz.model.apartment.KitchenWall;
+import com.ftn.sbnz.model.apartment.ComfortClass;
+import com.ftn.sbnz.model.apartment.Recommendation;
+
+template "profileCriteria"
+
+// Fires at salience -35: after Level 5 assigns comfort class (salience -20 to -28),
+// before Level 6 recommendations (salience -110). Inserts PREPORUCENO when the
+// apartment satisfies ALL mandatory criteria for the given buyer profile.
+rule "Profile @{profileType} - apartment meets all criteria"
+    salience -35
+    when
+        $p : BuyerProfile(type == BuyerProfileType.@{profileType})
+        $a : Apartment(comfortClass != null, @{comfortClassCheck})
+        $bedCount : Number(intValue >= @{minBedrooms}) from accumulate(
+            Room(type == RoomType.BEDROOM),
+            count(1)
+        )
+        $lr : Room(type == RoomType.LIVING_ROOM)
+        @{elevatorCheck}
+        @{orientationCheck}
+        @{kitchenCheck}
+        not Recommendation()
+    then
+        Recommendation r = new Recommendation(
+            "PREPORUCENO",
+            "@{profileType} profile: apartment satisfies all required criteria"
+                + " (comfort class " + $a.getComfortClass()
+                + ", bedrooms: " + $bedCount + ")",
+            0.0
+        );
+        insert(r);
+        System.out.println("[T3] @{profileType}: " + r);
+end
+
+end template
+
+// Data rows (profileType, minBedrooms, elevatorCheck, orientationCheck, comfortClassCheck, kitchenCheck):
+// SINGLE       | 0 | -              | -         | !=D    | -
+// COUPLE       | 1 | elevator=true  | S/E/W     | A or B | -
+// YOUNG_FAMILY | 2 | elevator=true  | S/E/W     | A or B | modular
+// FAMILY       | 2 | elevator=true  | S/E/W     | A or B | modular
+// LARGE_FAMILY | 3 | elevator=true  | South     | A      | modular
+// RETIREE      | 1 | elevator=true  | any       | A or B | -
+// INVESTOR     | 1 | -              | -         | !=D    | modular

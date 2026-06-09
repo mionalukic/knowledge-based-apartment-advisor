@@ -1,0 +1,173 @@
+package rules.forward;
+
+import com.ftn.sbnz.model.apartment.Apartment;
+import com.ftn.sbnz.model.apartment.Building;
+import com.ftn.sbnz.model.apartment.BuyerProfile;
+import com.ftn.sbnz.model.apartment.BuyerProfileType;
+import com.ftn.sbnz.model.apartment.Room;
+import com.ftn.sbnz.model.apartment.RoomType;
+import com.ftn.sbnz.model.apartment.Window;
+import com.ftn.sbnz.model.apartment.Orientation;
+import com.ftn.sbnz.model.apartment.KitchenWall;
+import com.ftn.sbnz.model.apartment.ComfortClass;
+import com.ftn.sbnz.model.apartment.Recommendation;
+
+// =============================================================================
+// PROFILE CRITERIA RULES (salience -35)
+// Fires after Level 5 comfort class assignment (-20 to -28) and Template 2b (-30).
+// Inserts PREPORUCENO when the apartment satisfies ALL required criteria for the
+// given buyer profile. The "not Recommendation()" guard prevents firing if
+// Template 2b already inserted a negative recommendation.
+// =============================================================================
+
+
+rule "Profile SINGLE - apartment meets all criteria"
+    salience -35
+    when
+        $p : BuyerProfile(type == BuyerProfileType.SINGLE)
+        $a : Apartment(comfortClass != null, comfortClass != ComfortClass.D)
+        $lr : Room(type == RoomType.LIVING_ROOM)
+        not Recommendation()
+    then
+        Recommendation r = new Recommendation(
+            "PREPORUCENO",
+            "SINGLE profile: apartment satisfies all required criteria (comfort class " + $a.getComfortClass() + ")",
+            0.0
+        );
+        insert(r);
+        System.out.println("[PC] SINGLE: " + r);
+end
+
+
+rule "Profile COUPLE - apartment meets all criteria"
+    salience -35
+    when
+        $p : BuyerProfile(type == BuyerProfileType.COUPLE)
+        $a : Apartment(comfortClass != null, comfortClass in (ComfortClass.A, ComfortClass.B))
+        Number(intValue >= 1) from accumulate(Room(type == RoomType.BEDROOM), count(1))
+        $lr : Room(type == RoomType.LIVING_ROOM)
+        Building(hasElevator == true)
+        exists Window(roomId == $lr.getId(),
+            orientation in (Orientation.SOUTH, Orientation.EAST, Orientation.WEST,
+                            Orientation.SOUTHEAST, Orientation.SOUTHWEST))
+        not Recommendation()
+    then
+        Recommendation r = new Recommendation(
+            "PREPORUCENO",
+            "COUPLE profile: apartment satisfies all required criteria (comfort class " + $a.getComfortClass() + ")",
+            0.0
+        );
+        insert(r);
+        System.out.println("[PC] COUPLE: " + r);
+end
+
+
+rule "Profile YOUNG_FAMILY - apartment meets all criteria"
+    salience -35
+    when
+        $p : BuyerProfile(type == BuyerProfileType.YOUNG_FAMILY)
+        $a : Apartment(comfortClass != null, comfortClass in (ComfortClass.A, ComfortClass.B))
+        Number(intValue >= 2) from accumulate(Room(type == RoomType.BEDROOM), count(1))
+        $lr : Room(type == RoomType.LIVING_ROOM)
+        Building(hasElevator == true)
+        exists Window(roomId == $lr.getId(),
+            orientation in (Orientation.SOUTH, Orientation.EAST, Orientation.WEST,
+                            Orientation.SOUTHEAST, Orientation.SOUTHWEST))
+        exists KitchenWall(modular30 == true || modular60 == true)
+        not Recommendation()
+    then
+        Recommendation r = new Recommendation(
+            "PREPORUCENO",
+            "YOUNG_FAMILY profile: apartment satisfies all required criteria (comfort class " + $a.getComfortClass() + ")",
+            0.0
+        );
+        insert(r);
+        System.out.println("[PC] YOUNG_FAMILY: " + r);
+end
+
+
+rule "Profile FAMILY - apartment meets all criteria"
+    salience -35
+    when
+        $p : BuyerProfile(type == BuyerProfileType.FAMILY)
+        $a : Apartment(comfortClass != null, comfortClass in (ComfortClass.A, ComfortClass.B))
+        Number(intValue >= 2) from accumulate(Room(type == RoomType.BEDROOM), count(1))
+        $lr : Room(type == RoomType.LIVING_ROOM)
+        Building(hasElevator == true)
+        exists Window(roomId == $lr.getId(),
+            orientation in (Orientation.SOUTH, Orientation.EAST, Orientation.WEST,
+                            Orientation.SOUTHEAST, Orientation.SOUTHWEST))
+        exists KitchenWall(modular30 == true || modular60 == true)
+        not Recommendation()
+    then
+        Recommendation r = new Recommendation(
+            "PREPORUCENO",
+            "FAMILY profile: apartment satisfies all required criteria (comfort class " + $a.getComfortClass() + ")",
+            0.0
+        );
+        insert(r);
+        System.out.println("[PC] FAMILY: " + r);
+end
+
+
+rule "Profile LARGE_FAMILY - apartment meets all criteria"
+    salience -35
+    when
+        $p : BuyerProfile(type == BuyerProfileType.LARGE_FAMILY)
+        $a : Apartment(comfortClass != null, comfortClass == ComfortClass.A)
+        Number(intValue >= 3) from accumulate(Room(type == RoomType.BEDROOM), count(1))
+        $lr : Room(type == RoomType.LIVING_ROOM)
+        Building(hasElevator == true)
+        exists Window(roomId == $lr.getId(),
+            orientation in (Orientation.SOUTH, Orientation.SOUTHEAST, Orientation.SOUTHWEST))
+        exists KitchenWall(modular30 == true || modular60 == true)
+        not Recommendation()
+    then
+        Recommendation r = new Recommendation(
+            "PREPORUCENO",
+            "LARGE_FAMILY profile: apartment satisfies all required criteria (comfort class A)",
+            0.0
+        );
+        insert(r);
+        System.out.println("[PC] LARGE_FAMILY: " + r);
+end
+
+
+rule "Profile RETIREE - apartment meets all criteria"
+    salience -35
+    when
+        $p : BuyerProfile(type == BuyerProfileType.RETIREE)
+        $a : Apartment(comfortClass != null, comfortClass in (ComfortClass.A, ComfortClass.B))
+        Number(intValue >= 1) from accumulate(Room(type == RoomType.BEDROOM), count(1))
+        $lr : Room(type == RoomType.LIVING_ROOM)
+        Building(hasElevator == true)
+        not Recommendation()
+    then
+        Recommendation r = new Recommendation(
+            "PREPORUCENO",
+            "RETIREE profile: apartment satisfies all required criteria (comfort class " + $a.getComfortClass() + ")",
+            0.0
+        );
+        insert(r);
+        System.out.println("[PC] RETIREE: " + r);
+end
+
+
+rule "Profile INVESTOR - apartment meets all criteria"
+    salience -35
+    when
+        $p : BuyerProfile(type == BuyerProfileType.INVESTOR)
+        $a : Apartment(comfortClass != null, comfortClass != ComfortClass.D)
+        Number(intValue >= 1) from accumulate(Room(type == RoomType.BEDROOM), count(1))
+        $lr : Room(type == RoomType.LIVING_ROOM)
+        exists KitchenWall(modular30 == true || modular60 == true)
+        not Recommendation()
+    then
+        Recommendation r = new Recommendation(
+            "PREPORUCENO",
+            "INVESTOR profile: apartment satisfies all required criteria (comfort class " + $a.getComfortClass() + ")",
+            0.0
+        );
+        insert(r);
+        System.out.println("[PC] INVESTOR: " + r);
+end

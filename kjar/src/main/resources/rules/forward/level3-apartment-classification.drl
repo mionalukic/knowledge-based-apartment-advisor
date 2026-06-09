@@ -1,0 +1,264 @@
+package rules.forward;
+
+import com.ftn.sbnz.model.apartment.Apartment;
+import com.ftn.sbnz.model.apartment.Room;
+import com.ftn.sbnz.model.apartment.RoomType;
+import com.ftn.sbnz.model.apartment.ApartmentStructure;
+import com.ftn.sbnz.model.apartment.Violation;
+
+// =============================================================================
+// LEVEL 3 - Apartment classification by structure (Article 20)
+// Determines the actual structure of the apartment based on its rooms,
+// regardless of how the seller advertises it.
+//
+// Salience is used so the LARGEST possible structure is tried first.
+// Each rule guards on `structure == null` to prevent re-classification.
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// Rule 3.9: Four-and-a-half room (cetvoroiposoban)
+// 1 living room + 4+ bedrooms + kitchen + bathroom + total area >= 97 m²
+// -----------------------------------------------------------------------------
+rule "3.9 Four-and-a-half room apartment"
+    salience 100
+    when
+        $a : Apartment(structure == null)
+        exists Room(type == RoomType.LIVING_ROOM)
+        exists Room(type == RoomType.KITCHEN)
+        exists Room(type == RoomType.BATHROOM)
+        $bedroomCount : Number(intValue >= 5) from accumulate(
+            $r : Room(type == RoomType.BEDROOM, bedroomCapacity > 0),
+            count($r)
+        )
+    then
+        modify($a) { setStructure(ApartmentStructure.FOUR_AND_A_HALF_ROOM) };
+        System.out.println("[3.9] Apartment " + $a.getId()
+            + " classified as FOUR_AND_A_HALF_ROOM ("
+            + $bedroomCount + " bedrooms, " + $a.getTotalNetUsableArea() + " m2)");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 3.8: Four-room (cetvorosoban)
+// 1 living + 3 two-person + 1 one-person + kitchen + bathroom
+// total area >= 86 m²; living room width >= 380 cm
+// -----------------------------------------------------------------------------
+rule "3.8 Four-room apartment"
+    salience 90
+    when
+        $a : Apartment(structure == null)
+        exists Room(type == RoomType.LIVING_ROOM, width >= 3.80)
+        exists Room(type == RoomType.KITCHEN)
+        exists Room(type == RoomType.BATHROOM)
+        $twoPerson : Number(intValue >= 3) from accumulate(
+            $r1 : Room(type == RoomType.BEDROOM, bedroomCapacity == 2),
+            count($r1)
+        )
+        $totalBedrooms : Number(intValue >= 4) from accumulate(
+            $r2 : Room(type == RoomType.BEDROOM, bedroomCapacity > 0),
+            count($r2)
+        )
+    then
+        modify($a) { setStructure(ApartmentStructure.FOUR_ROOM) };
+        System.out.println("[3.8] Apartment " + $a.getId()
+            + " classified as FOUR_ROOM ("
+            + $totalBedrooms + " bedrooms, " + $a.getTotalNetUsableArea() + " m2)");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 3.7: Three-and-a-half room (troiposoban)
+// 1 living + 2 two-person + 2 one-person bedrooms + kitchen + bathroom
+// total area >= 77 m²
+// -----------------------------------------------------------------------------
+rule "3.7 Three-and-a-half room apartment"
+    salience 80
+    when
+        $a : Apartment(structure == null)
+        exists Room(type == RoomType.LIVING_ROOM)
+        exists Room(type == RoomType.KITCHEN)
+        exists Room(type == RoomType.BATHROOM)
+        $twoPerson : Number(intValue >= 2) from accumulate(
+            $r1 : Room(type == RoomType.BEDROOM, bedroomCapacity == 2),
+            count($r1)
+        )
+        $totalBedrooms : Number(intValue >= 4) from accumulate(
+            $r2 : Room(type == RoomType.BEDROOM, bedroomCapacity > 0),
+            count($r2)
+        )
+    then
+        modify($a) { setStructure(ApartmentStructure.THREE_AND_A_HALF_ROOM) };
+        System.out.println("[3.7] Apartment " + $a.getId()
+            + " classified as THREE_AND_A_HALF_ROOM");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 3.6: Three-room (trosoban)
+// 1 living + 2 two-person + 1 one-person + kitchen + bathroom
+// total area >= 64 m²; living room width >= 360 cm
+// -----------------------------------------------------------------------------
+rule "3.6 Three-room apartment"
+    salience 70
+    when
+        $a : Apartment(structure == null)
+        exists Room(type == RoomType.LIVING_ROOM, width >= 3.60)
+        exists Room(type == RoomType.KITCHEN)
+        exists Room(type == RoomType.BATHROOM)
+        $twoPerson : Number(intValue >= 2) from accumulate(
+            $r1 : Room(type == RoomType.BEDROOM, bedroomCapacity == 2),
+            count($r1)
+        )
+        $totalBedrooms : Number(intValue >= 3) from accumulate(
+            $r2 : Room(type == RoomType.BEDROOM, bedroomCapacity > 0),
+            count($r2)
+        )
+    then
+        modify($a) { setStructure(ApartmentStructure.THREE_ROOM) };
+        System.out.println("[3.6] Apartment " + $a.getId()
+            + " classified as THREE_ROOM");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 3.5: Two-and-a-half room (dvoiposoban)
+// 1 living + 1 two-person + 1 one-person + kitchen + bathroom
+// total area >= 56 m²
+// -----------------------------------------------------------------------------
+rule "3.5 Two-and-a-half room apartment"
+    salience 60
+    when
+        $a : Apartment(structure == null)
+        exists Room(type == RoomType.LIVING_ROOM)
+        exists Room(type == RoomType.KITCHEN)
+        exists Room(type == RoomType.BATHROOM)
+        exists Room(type == RoomType.BEDROOM, bedroomCapacity == 2)
+        $totalBedrooms : Number(intValue >= 2) from accumulate(
+            $r : Room(type == RoomType.BEDROOM, bedroomCapacity > 0),
+            count($r)
+        )
+    then
+        modify($a) { setStructure(ApartmentStructure.TWO_AND_A_HALF_ROOM) };
+        System.out.println("[3.5] Apartment " + $a.getId()
+            + " classified as TWO_AND_A_HALF_ROOM");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 3.4: Two-room (dvosoban)
+// 1 living + 2 two-person bedrooms + kitchen + bathroom
+// total area >= 48 m²
+// -----------------------------------------------------------------------------
+rule "3.4 Two-room apartment"
+    salience 50
+    when
+        $a : Apartment(structure == null)
+        exists Room(type == RoomType.LIVING_ROOM)
+        exists Room(type == RoomType.KITCHEN)
+        exists Room(type == RoomType.BATHROOM)
+        $twoPerson : Number(intValue >= 2) from accumulate(
+            $r : Room(type == RoomType.BEDROOM, bedroomCapacity == 2),
+            count($r)
+        )
+    then
+        modify($a) { setStructure(ApartmentStructure.TWO_ROOM) };
+        System.out.println("[3.4] Apartment " + $a.getId()
+            + " classified as TWO_ROOM");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 3.3: One-and-a-half room (jednoiposoban)
+// 1 living + 1 two-person bedroom + kitchen + bathroom
+// total area >= 40 m²
+// -----------------------------------------------------------------------------
+rule "3.3 One-and-a-half room apartment"
+    salience 40
+    when
+        $a : Apartment(structure == null)
+        exists Room(type == RoomType.LIVING_ROOM)
+        exists Room(type == RoomType.KITCHEN)
+        exists Room(type == RoomType.BATHROOM)
+        exists Room(type == RoomType.BEDROOM, bedroomCapacity == 2)
+    then
+        modify($a) { setStructure(ApartmentStructure.ONE_AND_A_HALF_ROOM) };
+        System.out.println("[3.3] Apartment " + $a.getId()
+            + " classified as ONE_AND_A_HALF_ROOM");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 3.2: One-room (jednosoban)
+// 1 living + 1 bedroom (any) + kitchen + bathroom
+// total area >= 30 m²
+// -----------------------------------------------------------------------------
+rule "3.2 One-room apartment"
+    salience 30
+    when
+        $a : Apartment(structure == null)
+        exists Room(type == RoomType.LIVING_ROOM)
+        exists Room(type == RoomType.KITCHEN)
+        exists Room(type == RoomType.BATHROOM)
+        exists Room(type == RoomType.BEDROOM, bedroomCapacity > 0)
+    then
+        modify($a) { setStructure(ApartmentStructure.ONE_ROOM) };
+        System.out.println("[3.2] Apartment " + $a.getId()
+            + " classified as ONE_ROOM");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 3.1: Studio (garsonjera)
+// One combined living/sleeping space + kitchen + bathroom
+// total area >= 26 m²
+// In our model: NO BEDROOM, just one LIVING_ROOM (or living+kitchen)
+// -----------------------------------------------------------------------------
+rule "3.1 Studio apartment (garsonjera)"
+    salience 20
+    when
+        $a : Apartment(structure == null)
+        exists Room(type == RoomType.LIVING_ROOM)
+        exists Room(type == RoomType.BATHROOM)
+        not Room(type == RoomType.BEDROOM)
+    then
+        modify($a) { setStructure(ApartmentStructure.STUDIO) };
+        System.out.println("[3.1] Apartment " + $a.getId()
+            + " classified as STUDIO");
+end
+
+
+// -----------------------------------------------------------------------------
+// Rule 3.10: Area below minimum for structure (Article 20)
+// After classification (salience -10), check if the assigned structure's
+// minimum area requirement is met. Template 1 generates the per-structure
+// violation rules; this rule logs the downgrade recommendation.
+// -----------------------------------------------------------------------------
+rule "3.10 Area below minimum - downgrade recommended"
+    salience -10
+    when
+        $a : Apartment(structure != null)
+        exists Violation(articleReference == "Article 20", roomId == null)
+    then
+        System.out.println("[3.10] Apartment " + $a.getId()
+            + " classified as " + $a.getStructure()
+            + " by room composition but FAILS minimum area (Article 20). "
+            + "Per Pravilnik this should be classified one level lower.");
+end
+
+
+// -----------------------------------------------------------------------------
+// Final summary rule - runs last, regardless of classification
+// -----------------------------------------------------------------------------
+rule "3.X Apartment classification summary"
+    salience -100
+    when
+        $a : Apartment()
+    then
+        if ($a.getStructure() == null) {
+            System.out.println("[3.X] Apartment " + $a.getId()
+                + " could NOT be classified - does not meet any structure minimum");
+        } else {
+            System.out.println("[3.X] === FINAL STRUCTURE: " + $a.getStructure() + " ===");
+        }
+end

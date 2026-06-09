@@ -1,0 +1,194 @@
+package rules.forward;
+
+import com.ftn.sbnz.model.apartment.Apartment;
+import com.ftn.sbnz.model.apartment.Building;
+import com.ftn.sbnz.model.apartment.Room;
+import com.ftn.sbnz.model.apartment.RoomType;
+import com.ftn.sbnz.model.apartment.Warning;
+import com.ftn.sbnz.model.apartment.ComfortClass;
+
+// =============================================================================
+// HEURISTIC RULES H.1 – H.7
+//
+// H.1–H.6 (salience -10): insert Warnings BEFORE Level 5 class assignment
+//   so the warning count influences which comfort class is assigned.
+// H.7    (salience -28): upgrades comfort class AFTER all Level 5 corrections
+//   (-25 dead area, -26 energy class, -27 modular kitchen bonus).
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// H.1: Sofa doesn't fit
+// IF living room has no wall >= 260 cm (both length AND width < 260 cm)
+// THEN WARNING: standard sofa (220 cm) cannot fit with full approach clearance
+// -----------------------------------------------------------------------------
+rule "H.1 No space for sofa in living room"
+    salience -10
+    when
+        $r : Room(
+            type == RoomType.LIVING_ROOM,
+            length > 0,
+            length < 2.60,
+            width < 2.60
+        )
+    then
+        Warning w = new Warning(
+            "NO_SOFA_SPACE",
+            $r.getId(),
+            "Living room has no wall >= 260 cm: standard sofa (220 cm) cannot fit with full approach clearance",
+            0.0
+        );
+        insert(w);
+        System.out.println("[H.1] WARNING " + w);
+end
+
+
+// -----------------------------------------------------------------------------
+// H.2: Dining table for 6 doesn't fit
+// IF living room cannot fit a 240×180 cm rectangle in either orientation
+// THEN WARNING: no room for a 6-person dining table
+// -----------------------------------------------------------------------------
+rule "H.2 No space for 6-person dining table"
+    salience -10
+    when
+        $r : Room(
+            type == RoomType.LIVING_ROOM,
+            length > 0,
+            width > 0
+        )
+        eval(
+            Math.max($r.getLength(), $r.getWidth()) < 2.40 ||
+            Math.min($r.getLength(), $r.getWidth()) < 1.80
+        )
+    then
+        Warning w = new Warning(
+            "NO_DINING_TABLE_SPACE",
+            $r.getId(),
+            "Living room cannot accommodate a 240×180 cm dining table for 6 persons",
+            0.0
+        );
+        insert(w);
+        System.out.println("[H.2] WARNING " + w);
+end
+
+
+// -----------------------------------------------------------------------------
+// H.3: No space for washing machine in bathroom
+// IF bathroom width < 120 cm (too narrow to fit 60×60 cm washer alongside fixtures)
+// THEN WARNING: plan alternative location
+// -----------------------------------------------------------------------------
+rule "H.3 No space for washing machine in bathroom"
+    salience -10
+    when
+        $r : Room(
+            type == RoomType.BATHROOM,
+            width > 0,
+            width < 1.20
+        )
+    then
+        Warning w = new Warning(
+            "NO_WASHING_MACHINE_SPACE",
+            $r.getId(),
+            "Bathroom width < 120 cm: no room for a 60×60 cm washing machine alongside existing fixtures; plan alternative location",
+            0.0
+        );
+        insert(w);
+        System.out.println("[H.3] WARNING " + w);
+end
+
+
+// -----------------------------------------------------------------------------
+// H.4: Corner apartment – increased heating cost
+// IF apartment has 2–3 exterior walls (cornerApartment == true)
+// THEN WARNING: +20–30% heating cost vs inner apartment
+// -----------------------------------------------------------------------------
+rule "H.4 Corner apartment heating cost"
+    salience -10
+    when
+        Apartment(cornerApartment == true)
+    then
+        Warning w = new Warning(
+            "CORNER_APARTMENT_HEATING",
+            null,
+            "Corner apartment (2-3 exterior walls): expected heating cost +20-30% vs inner apartment",
+            0.0
+        );
+        insert(w);
+        System.out.println("[H.4] WARNING " + w);
+end
+
+
+// -----------------------------------------------------------------------------
+// H.5: Top floor without roof insulation
+// IF apartment is on the top floor AND roof is not insulated
+// THEN WARNING: +15% heating in winter, +30% cooling in summer
+// -----------------------------------------------------------------------------
+rule "H.5 Top floor without roof insulation"
+    salience -10
+    when
+        Apartment(topFloor == true, roofInsulated == false)
+    then
+        Warning w = new Warning(
+            "TOP_FLOOR_NO_INSULATION",
+            null,
+            "Top-floor apartment with uninsulated roof: +15% heating cost in winter, +30% cooling cost in summer",
+            0.0
+        );
+        insert(w);
+        System.out.println("[H.5] WARNING " + w);
+end
+
+
+// -----------------------------------------------------------------------------
+// H.6: Bedroom facing noisy street
+// IF a bedroom's window faces heavy traffic
+// THEN WARNING: acoustic issue, ~150 EUR/window for soundproof glazing
+// -----------------------------------------------------------------------------
+rule "H.6 Bedroom facing noisy street"
+    salience -10
+    when
+        $r : Room(
+            type == RoomType.BEDROOM,
+            facesNoisyStreet == true
+        )
+    then
+        Warning w = new Warning(
+            "NOISY_BEDROOM",
+            $r.getId(),
+            "Bedroom faces a heavy-traffic street: acoustic problem - consider soundproof windows (~150 EUR/window)",
+            150.0
+        );
+        insert(w);
+        System.out.println("[H.6] WARNING " + w);
+end
+
+
+// -----------------------------------------------------------------------------
+// H.7: Comfortable parking spot – comfort class bonus
+// IF parking width >= 250 cm AND length >= 500 cm (legal min: 230×480 cm, Art. 3)
+// THEN upgrade comfort class by one level
+// Fires AFTER Level 5 corrections (salience -25/-26/-27) so the bonus is applied last.
+// no-loop prevents re-activation after modify().
+// -----------------------------------------------------------------------------
+rule "H.7 Comfortable parking spot bonus"
+    salience -28
+    no-loop true
+    when
+        $a : Apartment(
+            comfortClass != null,
+            comfortClass != ComfortClass.A
+        )
+        Building(
+            hasParking == true,
+            parkingWidthCm >= 250,
+            parkingLengthCm >= 500
+        )
+    then
+        ComfortClass current = $a.getComfortClass();
+        ComfortClass upgraded = (current == ComfortClass.D) ? ComfortClass.C
+                              : (current == ComfortClass.C) ? ComfortClass.B
+                              : ComfortClass.A;
+        modify($a) { setComfortClass(upgraded) };
+        System.out.println("[H.7] Comfortable parking (>= 250x500 cm) → class "
+            + current + " upgraded to " + upgraded);
+end
