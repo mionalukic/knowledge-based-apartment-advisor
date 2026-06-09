@@ -27,11 +27,6 @@ public class ApartmentService {
         KieSession kSession = kieContainer.newKieSession("apartmentKSession");
 
 
-
-
-
-
-
         try {
             kSession.insert(apartment);
 
@@ -195,15 +190,13 @@ public class ApartmentService {
     }
 
     private boolean queryHasResult(KieSession kSession, String queryName, Object... args) {
-        try {
-            QueryResults results = args.length == 0
+        System.out.println("[QUERY] Pozivam: " + queryName);
+        QueryResults results = args.length == 0
                 ? kSession.getQueryResults(queryName)
                 : kSession.getQueryResults(queryName, args);
-            return results.iterator().hasNext();
-        } catch (Exception e) {
-            System.err.println("[BackwardChaining] Greška pri upitu '" + queryName + "': " + e.getMessage());
-            return false;
-        }
+        boolean result = results.iterator().hasNext();
+        System.out.println("[QUERY] " + queryName + " → " + result);
+        return result;
     }
 
     @SuppressWarnings("unchecked")

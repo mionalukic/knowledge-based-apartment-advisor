@@ -8,14 +8,13 @@ import com.ftn.sbnz.model.apartment.BuyerProfile;
 import com.ftn.sbnz.model.apartment.RoomType;
 
 // =============================================================================
-// BACKWARD CHAINING — QUERY-JI (dekompozicija cilja na podciljeve)
+// BACKWARD CHAINING — QUERY-JI
 //
 // Kupac postavlja visok cilj, sistem ga rekurzivno razlaže sve do listnih
 // činjenica u radnoj memoriji (AND/OR stablo, dubina 4-5 nivoa).
 //
 // Reuzabilni parametarski query-ji (imaPrirodnoSvetlo, imaVentilaciju,
-// imaStruju, imaVodu) pozivaju se iz više različitih konteksta —
-// demonstracija bound/unbound argumenata iz PDF specifikacije.
+// imaStruju, imaVodu) pozivaju se iz više različitih konteksta
 // =============================================================================
 
 
@@ -26,23 +25,23 @@ import com.ftn.sbnz.model.apartment.RoomType;
 //       iz različitih konteksta (kuhinja, kupatilo, dnevna)"
 // =============================================================================
 
-// Bound: $r — provjera prirodnog osvjetljenja za bilo koju prostoriju
+// Bound: $r — provera prirodnog osvjetljenja za bilo koju prostoriju
 query "imaPrirodnoSvetlo"(Room $r)
     Room(this == $r, totalGlazedArea > 0.0)
 end
 
-// Bound: $r — provjera mehaničke ventilacije za bilo koju prostoriju
+// Bound: $r — provera mehaničke ventilacije za bilo koju prostoriju
 // PDF: "imaVentilaciju(p) bound → da li kuhinja ima; unbound → koje prostorije imaju"
 query "imaVentilaciju"(Room $r)
     Room(this == $r, hasMechanicalVentilation == true)
 end
 
-// Bound: $a — provjera električne instalacije (poziva se iz dva konteksta)
+// Bound: $a — provera električne instalacije (poziva se iz dva konteksta)
 query "imaStruju"(Apartment $a)
     Apartment(this == $a, hasElectricalInstallation == true)
 end
 
-// Bound: $a — provjera vodovodne instalacije (poziva se iz dva konteksta)
+// Bound: $a — provera vodovodne instalacije (poziva se iz dva konteksta)
 query "imaVodu"(Apartment $a)
     Apartment(this == $a, hasWaterInstallation == true)
 end
@@ -203,7 +202,7 @@ query "liftDovoljan"(Building $b)
     Building(this == $b, hasElevator == true, elevatorDoorWidthCm >= 90)
 end
 
-// LISTNI: stan je na nižem spratu (ne zahtijeva lift)
+// LISTNI: stan je na nižem spratu (ne zahteva lift)
 query "spratDostupan"(Apartment $a)
     Apartment(this == $a, floor <= 3)
 end
