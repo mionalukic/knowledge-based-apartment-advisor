@@ -25,4 +25,11 @@ public class Apartment {
     private boolean roofInsulated;
 
     private ComfortClass comfortClass;
+
+    // Instalacije i grejanje (za backward chaining)
+    private boolean hasElectricalInstallation = true;
+    private boolean hasWaterInstallation = true;
+    // Vrednosti: CENTRAL, HEAT_PUMP, TA_FURNACE, INDIVIDUAL, NONE
+    private String heatingType = "NONE";
+    private boolean openConceptLivingKitchen = false;
 }

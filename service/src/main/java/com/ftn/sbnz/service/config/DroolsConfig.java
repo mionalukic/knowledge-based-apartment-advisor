@@ -31,7 +31,8 @@ public class DroolsConfig {
         "rules/forward/level5-comfort-class.drl",
         "rules/forward/level6-buyer-recommendation.drl",
         "rules/forward/heuristic-rules.drl",
-        "rules/forward/profile-criteria.drl"
+        "rules/forward/profile-criteria.drl",
+        "rules/backward/backward-chaining.drl"
     };
 
     @Bean
@@ -46,6 +47,7 @@ public class DroolsConfig {
         kieBaseModel.setDefault(true);
         kieBaseModel.addPackage("rules.forward");
         kieBaseModel.addPackage("rules.template");
+        kieBaseModel.addPackage("rules.backward");
         KieSessionModel kieSessionModel = kieBaseModel.newKieSessionModel("apartmentKSession");
         kieSessionModel.setDefault(true);
         kfs.writeKModuleXML(kieModuleModel.toXML());

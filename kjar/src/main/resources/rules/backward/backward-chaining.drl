@@ -1,0 +1,250 @@
+package rules.backward;
+
+import com.ftn.sbnz.model.apartment.Apartment;
+import com.ftn.sbnz.model.apartment.Building;
+import com.ftn.sbnz.model.apartment.Room;
+import com.ftn.sbnz.model.apartment.KitchenWall;
+import com.ftn.sbnz.model.apartment.BuyerProfile;
+import com.ftn.sbnz.model.apartment.RoomType;
+
+// =============================================================================
+// BACKWARD CHAINING — QUERY-JI (dekompozicija cilja na podciljeve)
+//
+// Kupac postavlja visok cilj, sistem ga rekurzivno razlaže sve do listnih
+// činjenica u radnoj memoriji (AND/OR stablo, dubina 4-5 nivoa).
+//
+// Reuzabilni parametarski query-ji (imaPrirodnoSvetlo, imaVentilaciju,
+// imaStruju, imaVodu) pozivaju se iz više različitih konteksta —
+// demonstracija bound/unbound argumenata iz PDF specifikacije.
+// =============================================================================
+
+
+// =============================================================================
+// REUZABILNI LISTNI QUERY-JI
+// Isti query se poziva iz više parent query-ja s različitim bound argumentom.
+// PDF: "imaPrirodnoSvetlo(prostorija) je parametarski query koji se poziva
+//       iz različitih konteksta (kuhinja, kupatilo, dnevna)"
+// =============================================================================
+
+// Bound: $r — provjera prirodnog osvjetljenja za bilo koju prostoriju
+query "imaPrirodnoSvetlo"(Room $r)
+    Room(this == $r, totalGlazedArea > 0.0)
+end
+
+// Bound: $r — provjera mehaničke ventilacije za bilo koju prostoriju
+// PDF: "imaVentilaciju(p) bound → da li kuhinja ima; unbound → koje prostorije imaju"
+query "imaVentilaciju"(Room $r)
+    Room(this == $r, hasMechanicalVentilation == true)
+end
+
+// Bound: $a — provjera električne instalacije (poziva se iz dva konteksta)
+query "imaStruju"(Apartment $a)
+    Apartment(this == $a, hasElectricalInstallation == true)
+end
+
+// Bound: $a — provjera vodovodne instalacije (poziva se iz dva konteksta)
+query "imaVodu"(Apartment $a)
+    Apartment(this == $a, hasWaterInstallation == true)
+end
+
+
+// =============================================================================
+// UPIT 1: potencijalZaVisokKomfor
+// "Da li ovaj stan ima potencijal da postane visoko komforan?"
+//
+// AND stablo — sve tri grane moraju biti zadovoljene:
+//   1. dobarProstorniPotencijal
+//   2. mogucnostKvalitetnogOpremanja
+//   3. tehnickiPotencijal
+// =============================================================================
+
+// ── GRANA 1: Prostorne karakteristike ────────────────────────────────────────
+
+// LISTNI: ukupna neto korisna površina >= 50 m²
+query "dovoljnaKvadratura"(Apartment $a)
+    Apartment(this == $a, totalNetUsableArea >= 50.0)
+end
+
+// LISTNI: nijedna prostorija nije prolazna
+query "dobarRaspored"()
+    not Room(walkThrough == true)
+end
+
+// AND čvor (nivo 2)
+query "dobarProstorniPotencijal"(Apartment $a)
+    dovoljnaKvadratura($a;)
+    dobarRaspored()
+end
+
+// ── GRANA 2: Mogućnost kvalitetnog opremanja kuhinje i kupatila ───────────────
+
+// LISTNI: postoji barem jedan kuhinjski zid (prostor za elemente)
+query "imaProstorZaElemente"()
+    exists KitchenWall()
+end
+
+// AND + OR čvor (nivo 3): kuhinja ima prostor I (prirodno svetlo ILI ventilaciju)
+// Poziva reuzabilne query-je imaPrirodnoSvetlo i imaVentilaciju
+query "kuhinjaMozeBitiFunkcionalna"()
+    imaProstorZaElemente()
+    $r : Room(type == RoomType.KITCHEN)
+    ( imaPrirodnoSvetlo($r;) )
+    or
+    ( imaVentilaciju($r;) )
+end
+
+// LISTNI: kupatilo ima dovoljno površine
+query "kupatiloDovoljnoProstrano"()
+    exists Room(type == RoomType.BATHROOM, area >= 4.0)
+end
+
+// AND čvor (nivo 3): struja I voda — poziva reuzabilne listne query-je
+// Kontekst: kupatilo (isti leaf query-ji se pozivaju i iz instalacijePostoje)
+query "instalacijeDobre"(Apartment $a)
+    imaStruju($a;)
+    imaVodu($a;)
+end
+
+// AND čvor (nivo 2)
+query "kupatileMozeBitiModerno"(Apartment $a)
+    kupatiloDovoljnoProstrano()
+    instalacijeDobre($a;)
+end
+
+// AND čvor (nivo 1 — spaja kuhinju i kupatilo)
+query "mogucnostKvalitetnogOpremanja"(Apartment $a)
+    kuhinjaMozeBitiFunkcionalna()
+    kupatileMozeBitiModerno($a;)
+end
+
+// ── GRANA 3: Tehnička infrastruktura ─────────────────────────────────────────
+
+// AND čvor (nivo 2): struja I voda — isti leaf query-ji, drugi kontekst
+// Demonstracija reuzabilnosti: imaStruju i imaVodu pozivaju se i iz instalacijeDobre
+query "instalacijePostoje"(Apartment $a)
+    imaStruju($a;)
+    imaVodu($a;)
+end
+
+// OR čvor (nivo 2): Centralno ILI Klima-inverter ILI TA-peć ILI Etažno
+query "grejanjeMoguce"(Apartment $a)
+    ( Apartment(this == $a, heatingType == "CENTRAL") )
+    or
+    ( Apartment(this == $a, heatingType == "HEAT_PUMP") )
+    or
+    ( Apartment(this == $a, heatingType == "TA_FURNACE") )
+    or
+    ( Apartment(this == $a, heatingType == "INDIVIDUAL") )
+end
+
+// AND čvor (nivo 1)
+query "tehnickiPotencijal"(Apartment $a)
+    instalacijePostoje($a;)
+    grejanjeMoguce($a;)
+end
+
+// ── GLAVNI UPIT 1 ─────────────────────────────────────────────────────────────
+
+query "potencijalZaVisokKomfor"(Apartment $a)
+    dobarProstorniPotencijal($a;)
+    mogucnostKvalitetnogOpremanja($a;)
+    tehnickiPotencijal($a;)
+end
+
+
+// =============================================================================
+// UPIT 2: stanPogodanZaPorodicu
+// "Da li je ovaj stan zaista pogodan za porodicu sa decom?"
+//
+// AND stablo — sve tri grane moraju biti zadovoljene:
+//   1. dovoljnoSobaZaDecu
+//   2. bezbedenPristupZgradi
+//   3. adekvatanZivotniProstor
+// =============================================================================
+
+// ── GRANA 1: Dovoljno soba za decu ───────────────────────────────────────────
+
+// LISTNI: svako dete dobija svoju sobu (broj spavaćih − 1 >= broj dece)
+query "svakoDeteImaSvojuSobu"(BuyerProfile $p)
+    BuyerProfile(this == $p, $n : numberOfChildren)
+    Number(intValue >= $n + 1) from accumulate(
+        Room(type == RoomType.BEDROOM, bedroomCapacity > 0),
+        count(1)
+    )
+end
+
+// OR čvor: deca mogu deliti sobu — isti pol ILI najmlađe <= 6 god (privatnost nije problem)
+query "decaMoguDelitiSobu"(BuyerProfile $p)
+    ( BuyerProfile(this == $p, hasMixedGenderChildren == false) )
+    or
+    ( BuyerProfile(this == $p, youngestChildAge <= 6) )
+end
+
+// OR čvor (nivo 1): svako ima svoju sobu ILI mogu deliti bez problema
+query "dovoljnoSobaZaDecu"(BuyerProfile $p)
+    ( svakoDeteImaSvojuSobu($p;) )
+    or
+    ( decaMoguDelitiSobu($p;) )
+end
+
+// ── GRANA 2: Bezbedan i pristupačan ulaz u zgradu ────────────────────────────
+
+// OR čvor (nivo 2): bez stepenika ILI rukohvati ILI pristupačna rampa (čl. 5 Sl. glasnik RS 22/2015)
+query "pristupacanUlaz"(Building $b)
+    ( Building(this == $b, stepsAtEntrance == 0) )
+    or
+    ( Building(this == $b, hasHandrailsOnStairs == true) )
+    or
+    ( Building(this == $b, accessible == true) )
+end
+
+// AND LISTNI: lift postoji I vrata >= 90 cm (prima dečija/invalidska kolica)
+query "liftDovoljan"(Building $b)
+    Building(this == $b, hasElevator == true, elevatorDoorWidthCm >= 90)
+end
+
+// LISTNI: stan je na nižem spratu (ne zahtijeva lift)
+query "spratDostupan"(Apartment $a)
+    Apartment(this == $a, floor <= 3)
+end
+
+// OR čvor (nivo 2): nizak sprat ILI dovoljan lift
+query "vertikalnaKomunikacija"(Apartment $a, Building $b)
+    ( spratDostupan($a;) )
+    or
+    ( liftDovoljan($b;) )
+end
+
+// AND čvor (nivo 1)
+query "bezbedenPristupZgradi"(Apartment $a, Building $b)
+    pristupacanUlaz($b;)
+    vertikalnaKomunikacija($a, $b;)
+end
+
+// ── GRANA 3: Adekvatan zajednički životni prostor ────────────────────────────
+
+// LISTNI: dnevna soba zadovoljava minimalne dimenzije
+query "dnevnaDovoljnoVelika"()
+    exists Room(type == RoomType.LIVING_ROOM, area >= 16.0)
+end
+
+// OR čvor (nivo 2): trpezarijski kutak (dnevna >= 20 m²) ILI otvoreni koncept dnevna+kuhinja
+query "imaZajednickiProstor"(Apartment $a)
+    ( Apartment(this == $a, openConceptLivingKitchen == true) )
+    or
+    ( exists Room(type == RoomType.LIVING_ROOM, area >= 20.0) )
+end
+
+// AND čvor (nivo 1)
+query "adekvatanZivotniProstor"(Apartment $a)
+    dnevnaDovoljnoVelika()
+    imaZajednickiProstor($a;)
+end
+
+// ── GLAVNI UPIT 2 ─────────────────────────────────────────────────────────────
+
+query "stanPogodanZaPorodicu"(Apartment $a, Building $b, BuyerProfile $p)
+    dovoljnoSobaZaDecu($p;)
+    bezbedenPristupZgradi($a, $b;)
+    adekvatanZivotniProstor($a;)
+end

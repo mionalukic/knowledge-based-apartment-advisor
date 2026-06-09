@@ -352,9 +352,9 @@ end
 
 
 // -----------------------------------------------------------------------------
-// Pravilo 6.10b: Rampa kao prednost za porodicu s malom djecom (kolica, ≤ 5 god)
+// Pravilo 6.10b: Rampa kao prednost za porodicu s malom decom (kolica, ≤ 5 god)
 // Guard "not Warning(code == CHILDREN_PRIVACY_ISSUE)" sprečava petlju sa 6.12:
-// kada 6.12 utvrdi da nema dovoljno soba, 6.10b više ne smije nadglasati tu odluku.
+// kada 6.12 utvrdi da nema dovoljno soba, 6.10b više ne sme da nadglasa tu odluku.
 // -----------------------------------------------------------------------------
 rule "6.10b Ramp advantage for young family with stroller"
     salience -150
@@ -371,10 +371,10 @@ rule "6.10b Ramp advantage for young family with stroller"
         modify($rec) {
             setCode("PREPORUCENO"),
             setDescription($rec.getDescription() +
-                " BONUS: Zgrada ima pristupačnu rampu — nesmetan ulazak sa dječijim kolicima " +
-                "(najmlađe dijete ≤ 5 godina). Preporuka podignuta na PREPORUČENO.")
+                " BONUS: Zgrada ima pristupačnu rampu — nesmetan ulazak sa dečijim kolicima " +
+                "(najmlađe dete ≤ 5 godina). Preporuka podignuta na PREPORUČENO.")
         };
-        System.out.println("[6.10b] Rampa bonus — preporuka podignuta na PREPORUCENO za porodicu s malim djetetom");
+        System.out.println("[6.10b] Rampa bonus — preporuka podignuta na PREPORUCENO za porodicu s malim detetom");
 end
 
 
@@ -403,15 +403,15 @@ rule "6.11 Mixed gender children - enough rooms"
         Warning w = new Warning(
             "CHILDREN_PRIVACY_BONUS",
             null,
-            "BONUS KOMFOR PRIVATNOSTI: Svako dijete (" + $numChildren + ") dobija svoju sobu " +
+            "BONUS KOMFOR PRIVATNOSTI: Svako dete (" + $numChildren + ") dobija svoju sobu " +
             "(ukupno " + $totalBedrooms + " spavaćih soba). " +
-            "Posebno važno za djecu različitog pola u tinejdžerskom uzrastu. " +
+            "Posebno važno za decu različitog pola u tinejdžerskom uzrastu. " +
             "Stan je izuzetan po pitanju privatnosti.",
             0.0
         );
         insert(w);
-        System.out.println("[6.11] BONUS — svako dijete ima vlastitu sobu ("
-            + $totalBedrooms + " spavacih, " + $numChildren + " djece)");
+        System.out.println("[6.11] BONUS — svako dete ima sopstvenu sobu ("
+            + $totalBedrooms + " spavacih, " + $numChildren + " dece)");
 end
 
 

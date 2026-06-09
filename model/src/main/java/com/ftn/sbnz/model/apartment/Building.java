@@ -38,4 +38,9 @@ public class Building {
     private int rampWidthCm;
     private boolean hasRampRestingPlatforms;
     private boolean accessible;
+
+    // Detalji ulaza (za backward chaining)
+    private int stepsAtEntrance = 0;
+    private boolean hasHandrailsOnStairs = false;
+    private int entryDoorWidthCm = 90;
 }
