@@ -1,0 +1,259 @@
+<div class="results-shell">
+
+  <!-- Header -->
+  <header class="results-header">
+    <div class="header-inner">
+      <span class="brand">Analiza stana</span>
+      <span class="brand-sub">Rezultati evaluacije</span>
+    </div>
+    <button class="btn-new" (click)="newAnalysis()">Nova analiza</button>
+  </header>
+
+  <main class="results-body">
+
+    <!-- ══════════════════════════ -->
+    <!-- EVALUATION RESULTS        -->
+    <!-- ══════════════════════════ -->
+    @if (resultType() === 'evaluation' && evaluation(); as r) {
+
+      <!-- Hero: comfort class -->
+      <div class="hero-card" [class]="'class-' + r.comfortClass.toLowerCase()">
+        <div class="hero-meta">
+          <span class="hero-eyebrow">Klasa komfora</span>
+          <span class="hero-class">{{ r.comfortClass }}</span>
+          <span class="hero-label">{{ comfortLabel() }}</span>
+          <p class="hero-desc">{{ comfortDesc() }}</p>
+        </div>
+        <div class="hero-stats">
+          <div class="stat">
+            <span class="stat-val">{{ r.totalNetUsableArea | number:'1.1-1' }} m²</span>
+            <span class="stat-key">Površina</span>
+          </div>
+          <div class="stat">
+            <span class="stat-val">{{ structureLabel() }}</span>
+            <span class="stat-key">Tip</span>
+          </div>
+          <div class="stat">
+            <span class="stat-val">{{ r.firedRules }}</span>
+            <span class="stat-key">Pravila</span>
+          </div>
+          <div class="stat">
+            <span class="stat-val">{{ r.crossVentilation ? 'Da' : 'Ne' }}</span>
+            <span class="stat-key">Provetravanje</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="results-grid">
+
+        <!-- Violations -->
+        <div class="result-card violations-card">
+          <div class="result-card-head">
+            <div class="result-icon-wrap error">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L15 14H1L8 1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.5" r="0.75" fill="currentColor"/></svg>
+            </div>
+            <div>
+              <h2 class="result-card-title">Prekršaji</h2>
+              <span class="result-card-count error">{{ r.violations?.length ?? 0 }}</span>
+            </div>
+          </div>
+
+          @if (!r.violations || r.violations.length === 0) {
+            <div class="empty-result success">
+              <span>Nema prekršaja</span>
+            </div>
+          }
+
+          @for (v of r.violations; track $index) {
+            <div class="result-item" [class.critical]="v.critical">
+              <div class="result-item-head">
+                @if (v.critical) {
+                  <span class="badge badge-critical">Kritično</span>
+                } @else {
+                  <span class="badge badge-minor">Manje</span>
+                }
+                @if (v.articleReference) {
+                  <span class="article-ref">čl. {{ v.articleReference }}</span>
+                }
+              </div>
+              <p class="result-item-desc">{{ v.description }}</p>
+              <div class="result-item-meta">
+                @if (v.deficitValue) {
+                  <span class="meta-chip">Deficit: {{ v.deficitValue | number:'1.2-2' }} {{ v.deficitUnit }}</span>
+                }
+                @if (v.estimatedRepairCost) {
+                  <span class="meta-chip cost">{{ formatCurrency(v.estimatedRepairCost) }}</span>
+                }
+              </div>
+            </div>
+          }
+
+          @if (totalRepairCost(r) > 0) {
+            <div class="card-total">
+              <span>Ukupni troškovi popravke</span>
+              <span class="total-val error">{{ formatCurrency(totalRepairCost(r)) }}</span>
+            </div>
+          }
+        </div>
+
+        <!-- Warnings -->
+        <div class="result-card warnings-card">
+          <div class="result-card-head">
+            <div class="result-icon-wrap warning">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M8 5V8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11" r="0.75" fill="currentColor"/></svg>
+            </div>
+            <div>
+              <h2 class="result-card-title">Upozorenja</h2>
+              <span class="result-card-count warning">{{ r.warnings?.length ?? 0 }}</span>
+            </div>
+          </div>
+
+          @if (!r.warnings || r.warnings.length === 0) {
+            <div class="empty-result success">
+              <span>Nema upozorenja</span>
+            </div>
+          }
+
+          @for (w of r.warnings; track $index) {
+            <div class="result-item">
+              <div class="result-item-head">
+                @if (w.code) {
+                  <span class="item-code">{{ w.code }}</span>
+                }
+              </div>
+              <p class="result-item-desc">{{ w.description }}</p>
+              @if (w.estimatedExtraCost) {
+                <div class="result-item-meta">
+                  <span class="meta-chip cost">{{ formatCurrency(w.estimatedExtraCost) }}</span>
+                </div>
+              }
+            </div>
+          }
+
+          @if (totalExtraCost(r) > 0) {
+            <div class="card-total">
+              <span>Ukupni dodatni troškovi</span>
+              <span class="total-val warning">{{ formatCurrency(totalExtraCost(r)) }}</span>
+            </div>
+          }
+        </div>
+
+        <!-- Recommendations -->
+        <div class="result-card recommendations-card full-width">
+          <div class="result-card-head">
+            <div class="result-icon-wrap success">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8L6.5 11.5L13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div>
+              <h2 class="result-card-title">Preporuke</h2>
+              <span class="result-card-count success">{{ r.recommendations?.length ?? 0 }}</span>
+            </div>
+          </div>
+
+          @if (!r.recommendations || r.recommendations.length === 0) {
+            <div class="empty-result">
+              <span>Nema preporuka</span>
+            </div>
+          }
+
+          <div class="recommendations-list">
+            @for (rec of r.recommendations; track $index) {
+              <div class="rec-item">
+                <div class="rec-icon">→</div>
+                <div class="rec-body">
+                  <p class="rec-desc">{{ rec.description }}</p>
+                  @if (rec.estimatedSavingEur) {
+                    <span class="rec-saving">Uštedite {{ formatCurrency(rec.estimatedSavingEur) }}</span>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+
+          @if (totalSaving(r) > 0) {
+            <div class="card-total success-total">
+              <span>Ukupna moguća uštedina</span>
+              <span class="total-val success">{{ formatCurrency(totalSaving(r)) }}</span>
+            </div>
+          }
+        </div>
+
+        <!-- Dead areas -->
+        @if (r.deadAreas && r.deadAreas.length > 0) {
+          <div class="result-card dead-areas-card full-width">
+            <div class="result-card-head">
+              <div class="result-icon-wrap neutral">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M2 6H14M6 2V14" stroke="currentColor" stroke-width="1.5"/></svg>
+              </div>
+              <div>
+                <h2 class="result-card-title">Mrtvi prostori</h2>
+                <span class="result-card-count neutral">{{ r.deadAreas.length }}</span>
+              </div>
+            </div>
+            <div class="dead-areas-list">
+              @for (da of r.deadAreas; track $index) {
+                <div class="dead-area-item">
+                  <span class="dead-area-size">{{ da.areaM2 | number:'1.2-2' }} m²</span>
+                  <span class="dead-area-reason">{{ da.reason }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+      </div>
+    }
+
+    <!-- ══════════════════════════ -->
+    <!-- BACKWARD QUERY RESULTS    -->
+    <!-- ══════════════════════════ -->
+    @if (resultType() === 'backward' && backward(); as b) {
+
+      <div class="hero-card" [class]="b.satisfied ? 'class-a' : 'class-d'">
+        <div class="hero-meta">
+          <span class="hero-eyebrow">Backward chaining upit</span>
+          <span class="hero-class">{{ b.satisfied ? '✓' : '✗' }}</span>
+          <span class="hero-label">{{ queryLabel() }}</span>
+          <p class="hero-desc">{{ b.satisfied ? 'Uslov je zadovoljen.' : 'Uslov nije zadovoljen.' }}</p>
+        </div>
+      </div>
+
+      <!-- Explanation -->
+      @if (b.explanation) {
+        <div class="explanation-card">
+          <h2 class="section-title">Objašnjenje</h2>
+          <p class="explanation-text">{{ b.explanation }}</p>
+        </div>
+      }
+
+      <!-- Subgoals -->
+      @if (b.subGoals && b.subGoals.length > 0) {
+        <div class="subgoals-card">
+          <h2 class="section-title">Podgoalovi</h2>
+          <div class="subgoals-list">
+            @for (sg of b.subGoals; track $index) {
+              <div class="subgoal-item" [class.satisfied]="sg.satisfied" [class.failed]="!sg.satisfied">
+                <div class="subgoal-icon">{{ sg.satisfied ? '✓' : '✗' }}</div>
+                <div class="subgoal-body">
+                  <span class="subgoal-name">{{ sg.goalName }}</span>
+                  @if (sg.description) {
+                    <p class="subgoal-desc">{{ sg.description }}</p>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+    }
+
+    <!-- No results -->
+    @if (!resultType()) {
+      <div class="no-results">
+        <p>Nema rezultata. Pokrenite novu analizu.</p>
+        <a routerLink="/evaluacija" class="btn-primary">Pokrenite analizu</a>
+      </div>
+    }
+
+  </main>
+</div>
