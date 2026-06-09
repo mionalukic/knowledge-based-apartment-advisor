@@ -1,0 +1,785 @@
+<div class="evaluator-shell">
+
+  <!-- Loading overlay -->
+  @if (isLoading) {
+    <div class="loading-overlay">
+      <div class="loading-box">
+        <div class="loading-ring">
+          <div></div><div></div><div></div><div></div>
+        </div>
+        <p class="loading-title">Analiza u toku</p>
+        <p class="loading-sub">Ekspertski sistem obrađuje podatke...</p>
+      </div>
+    </div>
+  }
+
+  <!-- Header -->
+  <header class="evaluator-header">
+    <div class="header-inner">
+      <span class="brand">Analiza stana</span>
+      <span class="brand-sub">Ekspertski sistem za procenu kvaliteta</span>
+    </div>
+    <div class="header-actions">
+      <div class="test-picker">
+        <select [(ngModel)]="selectedTestIndex" name="testCasePicker" class="select-test">
+          @for (tc of testCases; track $index; let i = $index) {
+            <option [ngValue]="i">{{ tc.label }}</option>
+          }
+        </select>
+        <button class="btn-test" type="button" (click)="loadTestData()">⚡ Učitaj</button>
+      </div>
+      <span class="step-counter-pill">{{ currentStep }} / {{ totalSteps }}</span>
+    </div>
+  </header>
+
+  <!-- Stepper -->
+  <div class="stepper-wrap">
+    <div class="stepper">
+      @for (step of steps; track step.label; let i = $index) {
+        <div class="step" [class.active]="currentStep === i + 1" [class.done]="currentStep > i + 1">
+          <div class="step-circle">
+            @if (currentStep > i + 1) { <span class="check">✓</span> } @else { <span>{{ i + 1 }}</span> }
+          </div>
+          <span class="step-label">{{ step.label }}</span>
+        </div>
+        @if (i < steps.length - 1) {
+          <div class="step-line" [class.done]="currentStep > i + 1"></div>
+        }
+      }
+    </div>
+  </div>
+
+  <!-- Error banner -->
+  @if (error) {
+    <div class="error-banner">
+      <span class="error-icon">!</span>
+      <span>{{ error }}</span>
+    </div>
+  }
+
+  <main class="evaluator-body">
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- KORAK 1 — ZGRADA                          -->
+    <!-- ══════════════════════════════════════════ -->
+    @if (currentStep === 1) {
+      <div class="step-content">
+        <div class="step-title-block">
+          <h1 class="step-title">Zgrada</h1>
+          <p class="step-desc">Unesite podatke o zgradi u kojoj se stan nalazi — tip, spratnost, pristupačnost i infrastruktura.</p>
+        </div>
+
+        <!-- Osnovno -->
+        <div class="card">
+          <h2 class="card-title">Osnovne informacije</h2>
+          <div class="form-grid">
+            <div class="form-field span-2">
+              <label>Tip zgrade</label>
+              <select [(ngModel)]="building.buildingType" name="bldType">
+                @for (t of buildingTypes; track t) {
+                  <option [value]="t">{{ labelForBuildingType(t) }}</option>
+                }
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Spratova iznad tla</label>
+              <input type="number" [(ngModel)]="building.aboveGroundFloors" name="floors" min="1" />
+            </div>
+            <div class="form-field">
+              <label>Ukupno stanova</label>
+              <input type="number" [(ngModel)]="building.totalApartments" name="totalApts" min="1" />
+            </div>
+            <div class="form-field span-2">
+              <label>Energetski razred</label>
+              <select [(ngModel)]="building.energyClass" name="energy">
+                @for (e of energyClasses; track e) {
+                  <option [value]="e">Razred {{ e }}</option>
+                }
+              </select>
+            </div>
+          </div>
+          <div class="toggle-group">
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="building.hasUsagePermit" name="usage" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Upotrebna dozvola</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Hodnici i stepenište -->
+        <div class="card">
+          <h2 class="card-title">Hodnici, vetrobran i stepenište</h2>
+          <div class="form-grid">
+            <div class="form-field">
+              <label>Širina hodnika (cm)</label>
+              <input type="number" [(ngModel)]="building.corridorWidthCm" name="corridor" min="0" />
+            </div>
+            <div class="form-field">
+              <label>Širina vetrobrana (cm)</label>
+              <input type="number" [(ngModel)]="building.windbreakWidthCm" name="windbreak" min="0" />
+            </div>
+            <div class="form-field">
+              <label>Širina stepenica (cm)</label>
+              <input type="number" [(ngModel)]="building.staircaseWidthCm" name="stairW" min="0" />
+            </div>
+            <div class="form-field">
+              <label>Gazište stepenica (cm)</label>
+              <input type="number" [(ngModel)]="building.stairTreadCm" name="stairT" min="0" />
+            </div>
+            <div class="form-field">
+              <label>Čelo stepenice (cm)</label>
+              <input type="number" [(ngModel)]="building.stairRiserCm" name="stairR" min="0" />
+            </div>
+            <div class="form-field">
+              <label>Stepenice na ulazu</label>
+              <input type="number" [(ngModel)]="building.stepsAtEntrance" name="steps" min="0" />
+            </div>
+            <div class="form-field span-2">
+              <label>Širina ulaznih vrata (cm)</label>
+              <input type="number" [(ngModel)]="building.entryDoorWidthCm" name="entryDoor" min="0" />
+            </div>
+          </div>
+          <div class="toggle-group">
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="building.hasHandrailsOnStairs" name="handrails" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Rukohvati na stepenicama</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Lift -->
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Lift</h2>
+            <label class="toggle-inline">
+              <input type="checkbox" [(ngModel)]="building.hasElevator" name="elevator" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label-inline">{{ building.hasElevator ? 'Da' : 'Ne' }}</span>
+            </label>
+          </div>
+          @if (building.hasElevator) {
+            <div class="form-grid">
+              <div class="form-field">
+                <label>Dužina kabine (cm)</label>
+                <input type="number" [(ngModel)]="building.elevatorCabinLengthCm" name="elLen" min="0" />
+              </div>
+              <div class="form-field">
+                <label>Širina kabine (cm)</label>
+                <input type="number" [(ngModel)]="building.elevatorCabinWidthCm" name="elW" min="0" />
+              </div>
+              <div class="form-field span-2">
+                <label>Širina vrata lifta (cm)</label>
+                <input type="number" [(ngModel)]="building.elevatorDoorWidthCm" name="elDoor" min="0" />
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Parking -->
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Parking</h2>
+            <label class="toggle-inline">
+              <input type="checkbox" [(ngModel)]="building.hasParking" name="parking" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label-inline">{{ building.hasParking ? 'Da' : 'Ne' }}</span>
+            </label>
+          </div>
+          @if (building.hasParking) {
+            <div class="form-grid">
+              <div class="form-field span-2">
+                <label>Vrsta parkinga</label>
+                <select [(ngModel)]="building.parkingType" name="pType">
+                  @for (pt of parkingTypes; track pt) {
+                    <option [value]="pt">{{ labelForParkingType(pt) }}</option>
+                  }
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Širina mesta (cm)</label>
+                <input type="number" [(ngModel)]="building.parkingWidthCm" name="pW" min="0" />
+              </div>
+              <div class="form-field">
+                <label>Dužina mesta (cm)</label>
+                <input type="number" [(ngModel)]="building.parkingLengthCm" name="pL" min="0" />
+              </div>
+              <div class="form-field span-2">
+                <label>Visina garaže (cm)</label>
+                <input type="number" [(ngModel)]="building.garageHeightCm" name="gH" min="0" />
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Rampa -->
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Rampa</h2>
+            <label class="toggle-inline">
+              <input type="checkbox" [(ngModel)]="building.hasRamp" name="ramp" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label-inline">{{ building.hasRamp ? 'Da' : 'Ne' }}</span>
+            </label>
+          </div>
+          @if (building.hasRamp) {
+            <div class="form-grid">
+              <div class="form-field">
+                <label>Nagib rampe (%)</label>
+                <input type="number" [(ngModel)]="building.rampSlopePercent" name="rampSlope" min="0" step="0.1" />
+              </div>
+              <div class="form-field">
+                <label>Širina rampe (cm)</label>
+                <input type="number" [(ngModel)]="building.rampWidthCm" name="rampW" min="0" />
+              </div>
+            </div>
+            <div class="toggle-group mt-2">
+              <label class="toggle-item">
+                <input type="checkbox" [(ngModel)]="building.hasRampRestingPlatforms" name="rampPlat" />
+                <span class="toggle-box"></span>
+                <span class="toggle-label">Odmorišta na rampi</span>
+              </label>
+            </div>
+          }
+        </div>
+
+      </div>
+    }
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- KORAK 2 — STAN                            -->
+    <!-- ══════════════════════════════════════════ -->
+    @if (currentStep === 2) {
+      <div class="step-content">
+        <div class="step-title-block">
+          <h1 class="step-title">Stan</h1>
+          <p class="step-desc">Osnovna obeležja stana — pozicija, instalacije i karakteristike.</p>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Pozicija i karakteristike</h2>
+          <div class="form-grid">
+            <div class="form-field">
+              <label>Sprat</label>
+              <input type="number" [(ngModel)]="apartment.floor" name="floor" min="0" />
+            </div>
+            <div class="form-field">
+              <label>Visina ograde terase (cm)</label>
+              <input type="number" [(ngModel)]="apartment.terraceRailingHeightCm" name="railing" min="0" />
+            </div>
+          </div>
+          <div class="toggle-group">
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="apartment.cornerApartment" name="corner" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Ugaoni stan</span>
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="apartment.topFloor" name="topFloor" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Zadnji sprat</span>
+            </label>
+            @if (apartment.topFloor) {
+              <label class="toggle-item nested">
+                <input type="checkbox" [(ngModel)]="apartment.roofInsulated" name="roofIns" />
+                <span class="toggle-box"></span>
+                <span class="toggle-label">Izolovan krov</span>
+              </label>
+            }
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="apartment.openConceptLivingKitchen" name="openConcept" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Otvoreni plan — kuhinja i dnevna soba</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Instalacije i grejanje</h2>
+          <div class="form-grid">
+            <div class="form-field span-2">
+              <label>Vrsta grejanja</label>
+              <select [(ngModel)]="apartment.heatingType" name="heating">
+                @for (h of heatingTypes; track h) {
+                  <option [value]="h">{{ labelForHeating(h) }}</option>
+                }
+              </select>
+            </div>
+          </div>
+          <div class="toggle-group">
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="apartment.hasElectricalInstallation" name="elec" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Električna instalacija</span>
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="apartment.hasWaterInstallation" name="water" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Vodovodna instalacija</span>
+            </label>
+          </div>
+        </div>
+
+      </div>
+    }
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- KORAK 3 — PROSTORIJE                      -->
+    <!-- ══════════════════════════════════════════ -->
+    @if (currentStep === 3) {
+      <div class="step-content">
+        <div class="step-title-block">
+          <h1 class="step-title">Prostorije</h1>
+          <p class="step-desc">Dodajte sve prostorije u stanu. Površina se automatski računa iz dužine i širine.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Lista prostorija</h2>
+            <button class="btn-add" type="button" (click)="addRoom()">+ Dodaj prostoriju</button>
+          </div>
+
+          @if (apartment.rooms.length === 0) {
+            <div class="empty-state">
+              <div class="empty-icon">⬜</div>
+              <p class="empty-title">Nema prostorija</p>
+              <p class="empty-sub">Dodajte barem jednu prostoriju da nastavite analizu.</p>
+            </div>
+          }
+
+          @for (room of apartment.rooms; track room.id; let i = $index) {
+            <div class="sub-card">
+              <div class="sub-card-head">
+                <span class="sub-card-label">{{ i + 1 }}. {{ labelForRoomType(room.type) }}</span>
+                <button class="btn-remove" type="button" (click)="removeRoom(i)" title="Ukloni">×</button>
+              </div>
+              <div class="form-grid">
+                <div class="form-field span-2">
+                  <label>Tip prostorije</label>
+                  <select [(ngModel)]="apartment.rooms[i].type" [name]="'room-type-' + i">
+                    @for (rt of roomTypes; track rt) {
+                      <option [value]="rt">{{ labelForRoomType(rt) }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Dužina (m)</label>
+                  <input type="number"
+                    [(ngModel)]="apartment.rooms[i].length"
+                    [name]="'room-len-' + i"
+                    min="0" step="0.1"
+                    (ngModelChange)="updateRoomArea(i)" />
+                </div>
+                <div class="form-field">
+                  <label>Širina (m)</label>
+                  <input type="number"
+                    [(ngModel)]="apartment.rooms[i].width"
+                    [name]="'room-w-' + i"
+                    min="0" step="0.1"
+                    (ngModelChange)="updateRoomArea(i)" />
+                </div>
+                <div class="form-field">
+                  <label>Površina (m²) <span class="field-hint">auto</span></label>
+                  <input type="number" [(ngModel)]="apartment.rooms[i].area" [name]="'room-area-' + i" min="0" step="0.1" />
+                </div>
+                <div class="form-field">
+                  <label>Slobodna visina (m)</label>
+                  <input type="number" [(ngModel)]="apartment.rooms[i].clearHeight" [name]="'room-h-' + i" min="0" step="0.01" />
+                </div>
+                @if (apartment.rooms[i].type === 'BEDROOM') {
+                  <div class="form-field span-2">
+                    <label>Kapacitet spavanja (osoba)</label>
+                    <input type="number" [(ngModel)]="apartment.rooms[i].bedroomCapacity" [name]="'room-cap-' + i" min="0" />
+                  </div>
+                }
+              </div>
+              <div class="toggle-group compact">
+                <label class="toggle-item">
+                  <input type="checkbox" [(ngModel)]="apartment.rooms[i].walkThrough" [name]="'room-walk-' + i" />
+                  <span class="toggle-box"></span>
+                  <span class="toggle-label">Prolazna prostorija</span>
+                </label>
+                <label class="toggle-item">
+                  <input type="checkbox" [(ngModel)]="apartment.rooms[i].hasMechanicalVentilation" [name]="'room-vent-' + i" />
+                  <span class="toggle-box"></span>
+                  <span class="toggle-label">Mehaničko provetravanje</span>
+                </label>
+                <label class="toggle-item">
+                  <input type="checkbox" [(ngModel)]="apartment.rooms[i].facesNoisyStreet" [name]="'room-noisy-' + i" />
+                  <span class="toggle-box"></span>
+                  <span class="toggle-label">Gleda na bučnu ulicu</span>
+                </label>
+              </div>
+            </div>
+          }
+        </div>
+
+      </div>
+    }
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- KORAK 4 — PROZORI                         -->
+    <!-- ══════════════════════════════════════════ -->
+    @if (currentStep === 4) {
+      <div class="step-content">
+        <div class="step-title-block">
+          <h1 class="step-title">Prozori</h1>
+          <p class="step-desc">Dodajte prozore i povežite ih sa prostorijama. Staklena površina se računa automatski.</p>
+        </div>
+
+        @if (apartment.rooms.length === 0) {
+          <div class="info-banner">
+            <span>Nema unesenih prostorija — dodajte prostorije u koraku 3 da biste mogli da dodate prozore.</span>
+          </div>
+        }
+
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Lista prozora</h2>
+            <button class="btn-add" type="button" (click)="addWindow()" [disabled]="apartment.rooms.length === 0">+ Dodaj prozor</button>
+          </div>
+
+          @if (apartment.windows.length === 0) {
+            <div class="empty-state">
+              <div class="empty-icon">🪟</div>
+              <p class="empty-title">Nema prozora</p>
+              <p class="empty-sub">Opciono — dodajte prozore za precizni obračun osvetljenja.</p>
+            </div>
+          }
+
+          @for (win of apartment.windows; track trackByIndex($index); let i = $index) {
+            <div class="sub-card">
+              <div class="sub-card-head">
+                <span class="sub-card-label">Prozor {{ i + 1 }}</span>
+                <button class="btn-remove" type="button" (click)="removeWindow(i)" title="Ukloni">×</button>
+              </div>
+              <div class="form-grid">
+                <div class="form-field span-2">
+                  <label>Prostorija</label>
+                  <select [(ngModel)]="apartment.windows[i].roomId" [name]="'win-room-' + i">
+                    @for (room of apartment.rooms; track room.id) {
+                      <option [value]="room.id">{{ labelForRoomType(room.type) }} · {{ room.id.slice(-5) }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Širina (m)</label>
+                  <input type="number"
+                    [(ngModel)]="apartment.windows[i].width"
+                    [name]="'win-w-' + i"
+                    min="0" step="0.01"
+                    (ngModelChange)="updateWindowGlazedArea(i)" />
+                </div>
+                <div class="form-field">
+                  <label>Visina (m)</label>
+                  <input type="number"
+                    [(ngModel)]="apartment.windows[i].height"
+                    [name]="'win-h-' + i"
+                    min="0" step="0.01"
+                    (ngModelChange)="updateWindowGlazedArea(i)" />
+                </div>
+                <div class="form-field">
+                  <label>Visina parapeta (m)</label>
+                  <input type="number" [(ngModel)]="apartment.windows[i].parapetHeight" [name]="'win-par-' + i" min="0" step="0.01" />
+                </div>
+                <div class="form-field">
+                  <label>Staklena površina (m²) <span class="field-hint">auto</span></label>
+                  <input type="number" [(ngModel)]="apartment.windows[i].glazedArea" [name]="'win-glass-' + i" min="0" step="0.01" />
+                </div>
+                <div class="form-field span-2">
+                  <label>Orijentacija</label>
+                  <select [(ngModel)]="apartment.windows[i].orientation" [name]="'win-orient-' + i">
+                    @for (o of orientations; track o) {
+                      <option [value]="o">{{ labelForOrientation(o) }}</option>
+                    }
+                  </select>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+
+      </div>
+    }
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- KORAK 5 — KUHINJSKI ZIDOVI                -->
+    <!-- ══════════════════════════════════════════ -->
+    @if (currentStep === 5) {
+      <div class="step-content">
+        <div class="step-title-block">
+          <h1 class="step-title">Kuhinjski zidovi</h1>
+          <p class="step-desc">Opciono — unesite kuhinjske zidove za procenu funkcionalnosti kuhinje.</p>
+        </div>
+
+        @if (kitchenRooms.length === 0) {
+          <div class="info-banner">
+            <span>Nema kuhinja u prostoru — dodajte prostoriju tipa <strong>Kuhinja</strong> u koraku 3 da biste mogli da unesete kuhinjske zidove.</span>
+          </div>
+        }
+
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Lista kuhinjskih zidova</h2>
+            <button class="btn-add" type="button" (click)="addKitchenWall()" [disabled]="kitchenRooms.length === 0">+ Dodaj zid</button>
+          </div>
+
+          @if (apartment.kitchenWalls.length === 0) {
+            <div class="empty-state">
+              <div class="empty-icon">🍳</div>
+              <p class="empty-title">Nema kuhinjskih zidova</p>
+              <p class="empty-sub">Ovaj korak je opcionalan — možete preskočiti.</p>
+            </div>
+          }
+
+          @for (kw of apartment.kitchenWalls; track kw.id; let i = $index) {
+            <div class="sub-card">
+              <div class="sub-card-head">
+                <span class="sub-card-label">Kuhinjski zid {{ i + 1 }}</span>
+                <button class="btn-remove" type="button" (click)="removeKitchenWall(i)" title="Ukloni">×</button>
+              </div>
+              <div class="form-grid">
+                <div class="form-field span-2">
+                  <label>Kuhinja</label>
+                  <select [(ngModel)]="apartment.kitchenWalls[i].roomId" [name]="'kw-room-' + i">
+                    @for (room of kitchenRooms; track room.id) {
+                      <option [value]="room.id">Kuhinja · {{ room.id.slice(-5) }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Dužina zida (cm)</label>
+                  <input type="number"
+                    [(ngModel)]="apartment.kitchenWalls[i].lengthCm"
+                    [name]="'kw-len-' + i"
+                    min="0"
+                    (ngModelChange)="updateKitchenWallModularity(i)" />
+                </div>
+                <div class="form-field kw-result-field">
+                  <label>Modularnost <span class="field-hint">auto</span></label>
+                  <div class="kw-badge" [class]="'kw-badge--' + kitchenWallModularityLabel(i).type">
+                    {{ kitchenWallModularityLabel(i).text }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+
+      </div>
+    }
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- KORAK 6 — MRTVE POVRŠINE                  -->
+    <!-- ══════════════════════════════════════════ -->
+    @if (currentStep === 6) {
+      <div class="step-content">
+        <div class="step-title-block">
+          <h1 class="step-title">Mrtve površine</h1>
+          <p class="step-desc">Opciono — unesite površine koje su neupotrebljive (kose ploče, stupovi i sl.).</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Lista mrtvih površina</h2>
+            <button class="btn-add" type="button" (click)="addDeadArea()" [disabled]="apartment.rooms.length === 0">+ Dodaj površinu</button>
+          </div>
+
+          @if (apartment.deadAreas.length === 0) {
+            <div class="empty-state">
+              <div class="empty-icon">📐</div>
+              <p class="empty-title">Nema mrtvih površina</p>
+              <p class="empty-sub">Ovaj korak je opcionalan — možete preskočiti ako nema neupotrebljivih površina.</p>
+            </div>
+          }
+
+          @for (da of apartment.deadAreas; track trackByIndex($index); let i = $index) {
+            <div class="sub-card">
+              <div class="sub-card-head">
+                <span class="sub-card-label">Mrtva površina {{ i + 1 }}</span>
+                <button class="btn-remove" type="button" (click)="removeDeadArea(i)" title="Ukloni">×</button>
+              </div>
+              <div class="form-grid">
+                <div class="form-field span-2">
+                  <label>Prostorija</label>
+                  <select [(ngModel)]="apartment.deadAreas[i].roomId" [name]="'da-room-' + i">
+                    @for (room of apartment.rooms; track room.id) {
+                      <option [value]="room.id">{{ labelForRoomType(room.type) }} · {{ room.id.slice(-5) }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Površina (m²)</label>
+                  <input type="number" [(ngModel)]="apartment.deadAreas[i].areaM2" [name]="'da-area-' + i" min="0" step="0.01" />
+                </div>
+                <div class="form-field">
+                  <label>Razlog</label>
+                  <input type="text" [(ngModel)]="apartment.deadAreas[i].reason" [name]="'da-reason-' + i" placeholder="npr. kosa krovišta" />
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+
+      </div>
+    }
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- KORAK 7 — PROFIL KUPCA                    -->
+    <!-- ══════════════════════════════════════════ -->
+    @if (currentStep === 7) {
+      <div class="step-content">
+        <div class="step-title-block">
+          <h1 class="step-title">Profil kupca</h1>
+          <p class="step-desc">Unesite podatke o kupcu kako bi sistem prilagodio analizu stvarnim potrebama korisnika.</p>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Profil</h2>
+          <div class="form-grid">
+            <div class="form-field span-2">
+              <label>Tip kupca</label>
+              <select [(ngModel)]="buyerProfile.type" name="bpType">
+                @for (t of buyerProfileTypes; track t) {
+                  <option [value]="t">{{ labelForBuyerType(t) }}</option>
+                }
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Broj stanara</label>
+              <input type="number" [(ngModel)]="buyerProfile.numberOfOccupants" name="occupants" min="1" />
+            </div>
+            <div class="form-field">
+              <label>Maksimalni budžet (€)</label>
+              <input type="number" [(ngModel)]="buyerProfile.maxBudgetEur" name="budget" min="0" step="1000" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Porodica</h2>
+          <div class="toggle-group">
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="buyerProfile.hasChildren" name="hasKids" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Ima decu</span>
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="buyerProfile.hasElderlyOrDisabled" name="elderly" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Starija ili invalidna osoba u domaćinstvu</span>
+            </label>
+          </div>
+
+          @if (buyerProfile.hasChildren) {
+            <div class="form-grid mt-2">
+              <div class="form-field">
+                <label>Broj dece</label>
+                <input type="number" [(ngModel)]="buyerProfile.numberOfChildren" name="numKids" min="0" />
+              </div>
+              <div class="form-field">
+                <label>Starost najmlađeg deteta</label>
+                <input type="number" [(ngModel)]="buyerProfile.youngestChildAge" name="youngAge" min="0" max="99" />
+              </div>
+              <div class="form-field span-2">
+                <label class="toggle-item">
+                  <input type="checkbox" [(ngModel)]="buyerProfile.hasMixedGenderChildren" name="mixedKids" />
+                  <span class="toggle-box"></span>
+                  <span class="toggle-label">Deca različitog pola</span>
+                </label>
+              </div>
+            </div>
+          }
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Prioriteti</h2>
+          <div class="toggle-group">
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="buyerProfile.needsParking" name="needPark" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Potreban parking</span>
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="buyerProfile.prioritizesNaturalLight" name="light" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Prioritet: prirodno osvetljenje</span>
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="buyerProfile.prioritizesQuiet" name="quiet" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Prioritet: tišina</span>
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" [(ngModel)]="buyerProfile.acceptsRenovation" name="renov" />
+              <span class="toggle-box"></span>
+              <span class="toggle-label">Prihvata renovaciju</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Analiza -->
+        <div class="card action-card">
+          <h2 class="card-title">Pokretanje analize</h2>
+
+          <div class="action-section">
+            <p class="action-desc">Kompletna evaluacija stana prema svim pravilima ekspertskog sistema.</p>
+            <button class="btn-primary" type="button" (click)="evaluate()" [disabled]="isLoading">
+              Evaluiraj stan
+            </button>
+          </div>
+
+          <div class="action-divider">
+            <span>ili</span>
+          </div>
+
+          <div class="action-section">
+            <p class="action-desc">Backward chaining upit — provera specifičnog uslova.</p>
+            <div class="query-options">
+              <label class="radio-item" [class.selected]="selectedQuery === 'potencijalZaVisokKomfor'">
+                <input type="radio" [(ngModel)]="selectedQuery" name="queryName" value="potencijalZaVisokKomfor" />
+                <span class="radio-box"></span>
+                <div class="radio-content">
+                  <span class="radio-title">Potencijal za visok komfor</span>
+                  <span class="radio-desc">Da li stan ispunjava uslove za visoku klasu komfora?</span>
+                </div>
+              </label>
+              <label class="radio-item" [class.selected]="selectedQuery === 'stanPogodanZaPorodicu'">
+                <input type="radio" [(ngModel)]="selectedQuery" name="queryName" value="stanPogodanZaPorodicu" />
+                <span class="radio-box"></span>
+                <div class="radio-content">
+                  <span class="radio-title">Stan pogodan za porodicu</span>
+                  <span class="radio-desc">Da li stan zadovoljava potrebe porodičnog stanovanja?</span>
+                </div>
+              </label>
+            </div>
+            <button class="btn-secondary" type="button" (click)="runBackwardQuery()" [disabled]="isLoading">
+              Pokreni upit
+            </button>
+          </div>
+        </div>
+
+      </div>
+    }
+
+  </main>
+
+  <!-- Navigation footer -->
+  <footer class="nav-footer">
+    <div class="nav-inner">
+      <button class="btn-nav btn-back" type="button" (click)="prevStep()" [class.invisible]="currentStep === 1">
+        ← Nazad
+      </button>
+      <div class="progress-dots">
+        @for (step of steps; track step.label; let i = $index) {
+          <div class="dot" [class.active]="currentStep === i + 1" [class.done]="currentStep > i + 1"></div>
+        }
+      </div>
+      <button class="btn-nav btn-next" type="button" (click)="nextStep()" [class.invisible]="currentStep === totalSteps">
+        Napred →
+      </button>
+    </div>
+  </footer>
+
+</div>
