@@ -58,6 +58,19 @@ export enum Orientation {
   SOUTHWEST = 'SOUTHWEST',
 }
 
+export interface NoiseSource {
+  name: string;
+  noiseLevelDB: number;
+}
+
+export interface RoomConnection {
+  roomIdA: string;
+  roomIdB: string;
+  doorWidthCm: number;
+  lockedDoors: boolean;
+  doorInsulationDB: number;
+}
+
 export interface Room {
   id: string;
   type: RoomType;
@@ -70,6 +83,10 @@ export interface Room {
   walkThrough: boolean;
   hasMechanicalVentilation: boolean;
   facesNoisyStreet: boolean;
+  // Backward chaining — buka i evakuacija
+  hasDirectExit?: boolean;
+  doorWidthCm?: number;
+  wallInsulationDB?: number;
 }
 
 export interface ApartmentWindow {
@@ -102,6 +119,8 @@ export interface Apartment {
   windows: ApartmentWindow[];
   kitchenWalls: KitchenWall[];
   deadAreas: DeadArea[];
+  roomConnections?: RoomConnection[];
+  noiseSource?: NoiseSource;
   totalNetUsableArea: number;
   crossVentilation: boolean;
   structure: ApartmentStructure;
@@ -235,6 +254,7 @@ export function createDefaultApartment(): Apartment {
     windows: [],
     kitchenWalls: [],
     deadAreas: [],
+    roomConnections: [],
     totalNetUsableArea: 65,
     crossVentilation: false,
     structure: ApartmentStructure.TWO_ROOM,
@@ -314,6 +334,19 @@ export function createDefaultRoom(): Room {
     walkThrough: false,
     hasMechanicalVentilation: false,
     facesNoisyStreet: false,
+    hasDirectExit: false,
+    doorWidthCm: 90,
+    wallInsulationDB: 0,
+  };
+}
+
+export function createDefaultRoomConnection(roomIdA = '', roomIdB = ''): RoomConnection {
+  return {
+    roomIdA,
+    roomIdB,
+    doorWidthCm: 90,
+    lockedDoors: false,
+    doorInsulationDB: 15,
   };
 }
 

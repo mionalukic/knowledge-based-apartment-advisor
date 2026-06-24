@@ -6,6 +6,8 @@ import com.ftn.sbnz.model.apartment.Room;
 import com.ftn.sbnz.model.apartment.KitchenWall;
 import com.ftn.sbnz.model.apartment.BuyerProfile;
 import com.ftn.sbnz.model.apartment.RoomType;
+import com.ftn.sbnz.model.apartment.NoiseSource;
+import com.ftn.sbnz.model.apartment.RoomConnection;
 
 // =============================================================================
 // BACKWARD CHAINING — QUERY-JI
@@ -246,4 +248,70 @@ query "stanPogodanZaPorodicu"(Apartment $a, Building $b, BuyerProfile $p)
     dovoljnoSobaZaDecu($p;)
     bezbedenPristupZgradi($a, $b;)
     adekvatanZivotniProstor($a;)
+end
+
+
+// =============================================================================
+// REKURZIVNI UPIT R1: bukaProhvatljiva
+// =============================================================================
+
+// BAZA: soba direktno prima buku sa ulice kroz spoljni zid
+query "bazaBukeUsobi"(Room $r, double $maxDB)
+    Room(this == $r, facesNoisyStreet == true, $wallIns : wallInsulationDB)
+    NoiseSource($noiseDB : noiseLevelDB)
+    eval($noiseDB - $wallIns <= $maxDB)
+end
+
+// KORAK: buka dolazi iz susedne prostorije kroz vrata A→B
+// Koristimo Double/Integer from new ... da bismo izbegli aritmetiku u pozivu query-ja
+query "bukaKrozSusedu"(Room $r, double $maxDB, int $dubina)
+    eval($dubina > 0)
+    Room(this == $r, facesNoisyStreet == false)
+    $rc : RoomConnection(roomIdA == $r.id, $nextId : roomIdB, $doorIns : doorInsulationDB)
+    $r2 : Room(id == $nextId)
+    Double($povecaniPrag : doubleValue) from new Double($maxDB + $doorIns)
+    Integer($smanjenaGlubina : intValue) from new Integer($dubina - 1)
+    bukaProhvatljiva($r2, $povecaniPrag, $smanjenaGlubina;)
+end
+
+// KOMBINATOR: OR izmedju baze i rekurzivnog koraka (svaka grana = jedan poziv)
+query "bukaProhvatljiva"(Room $r, double $maxDB, int $dubina)
+    ( bazaBukeUsobi($r, $maxDB;) )
+    or
+    ( bukaKrozSusedu($r, $maxDB, $dubina;) )
+end
+
+
+// =============================================================================
+// REKURZIVNI UPIT R2: imaBezbedanIzlaz
+// =============================================================================
+
+// Sub-query: provera prohodnosti prostorije na putu evakuacije
+query "koridorProhodan"(Room $r)
+    ( Room(this == $r, type != RoomType.HALLWAY) )
+    or
+    ( Room(this == $r, type == RoomType.HALLWAY, width >= 1.20) )
+end
+
+// BAZA: soba ima direktan izlaz na stepeniste/spolja i dovoljna vrata
+query "sobaSaDirektimIzlazom"(Room $r)
+    Room(this == $r, hasDirectExit == true, doorWidthCm >= 90.0)
+end
+
+// KORAK: put do izlaza ide kroz susednu prostoriju
+query "izlazKrozSusedu"(Room $r, int $dubina)
+    eval($dubina > 0)
+    Room(this == $r)
+    $rc : RoomConnection(roomIdA == $r.id, doorWidthCm >= 90.0, lockedDoors == false, $nextId : roomIdB)
+    $r2 : Room(id == $nextId)
+    Integer($smanjenaGlubina : intValue) from new Integer($dubina - 1)
+    koridorProhodan($r2;)
+    imaBezbedanIzlaz($r2, $smanjenaGlubina;)
+end
+
+// KOMBINATOR: OR izmedju baze i rekurzivnog koraka
+query "imaBezbedanIzlaz"(Room $r, int $dubina)
+    ( sobaSaDirektimIzlazom($r;) )
+    or
+    ( izlazKrozSusedu($r, $dubina;) )
 end

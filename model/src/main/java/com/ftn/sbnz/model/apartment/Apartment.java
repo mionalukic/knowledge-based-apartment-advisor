@@ -13,6 +13,10 @@ public class Apartment {
     private List<Window> windows = new ArrayList<>();
     private List<KitchenWall> kitchenWalls = new ArrayList<>();
     private List<DeadArea> deadAreas = new ArrayList<>();
+    private List<RoomConnection> roomConnections = new ArrayList<>();
+
+    // Izvor buke u okruzenju stana (null = nema poznatog izvora buke)
+    private NoiseSource noiseSource;
 
     private double totalNetUsableArea;
     private boolean crossVentilation;

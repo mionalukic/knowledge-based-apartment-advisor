@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class ApartmentService {
@@ -56,6 +57,14 @@ public class ApartmentService {
                     kSession.insert(da);
                 }
             }
+            if (apartment.getRoomConnections() != null) {
+                for (RoomConnection rc : apartment.getRoomConnections()) {
+                    kSession.insert(rc);
+                }
+            }
+            if (apartment.getNoiseSource() != null) {
+                kSession.insert(apartment.getNoiseSource());
+            }
 
             int firedRules = kSession.fireAllRules();
             System.out.println("=== Evaluation complete: " + firedRules + " rules fired ===");
@@ -88,6 +97,10 @@ public class ApartmentService {
                 apartment.getKitchenWalls().forEach(kSession::insert);
             if (apartment.getDeadAreas() != null)
                 apartment.getDeadAreas().forEach(kSession::insert);
+            if (apartment.getRoomConnections() != null)
+                apartment.getRoomConnections().forEach(kSession::insert);
+            if (apartment.getNoiseSource() != null)
+                kSession.insert(apartment.getNoiseSource());
 
             kSession.fireAllRules();
 
@@ -95,11 +108,15 @@ public class ApartmentService {
                 return runKomforQuery(kSession, apartment);
             } else if ("stanPogodanZaPorodicu".equals(queryName)) {
                 return runPorodicaQuery(kSession, apartment, building, buyerProfile);
+            } else if ("bukaProhvatljiva".equals(queryName)) {
+                return runBukaQuery(kSession, apartment);
+            } else if ("imaBezbedanIzlaz".equals(queryName)) {
+                return runEvakuacijaQuery(kSession, apartment);
             } else {
-                BackwardQueryResponse resp = new BackwardQueryResponse(queryName, false,
+                return new BackwardQueryResponse(queryName, false,
                     "Nepoznat naziv upita: " + queryName +
-                    ". Dostupni upiti: potencijalZaVisokKomfor, stanPogodanZaPorodicu");
-                return resp;
+                    ". Dostupni upiti: potencijalZaVisokKomfor, stanPogodanZaPorodicu, " +
+                    "bukaProhvatljiva, imaBezbedanIzlaz");
             }
         } finally {
             kSession.dispose();
@@ -186,6 +203,86 @@ public class ApartmentService {
             " | " +
             (zajednicki ? "[OK] Postoji zajednički prostor (trpezarija / otvoreni koncept)" : "[FAIL] Nema zajedničkog prostora"));
 
+        return resp;
+    }
+
+    // ── UPIT R1: Rekurzivna transmisija buke ─────────────────────────────────────
+    // Spavaca soba: prag 35 dB | Dnevna soba: prag 40 dB | Ostale: 45 dB
+    // Max dubina rekurzije: 5 soba u lancu
+    private BackwardQueryResponse runBukaQuery(KieSession kSession, Apartment apartment) {
+        if (apartment.getNoiseSource() == null) {
+            return new BackwardQueryResponse("bukaProhvatljiva", true,
+                "Nema definisanog izvora buke — buka nije problem.");
+        }
+
+        List<String> okSobe = new ArrayList<>();
+        List<String> problemSobe = new ArrayList<>();
+
+        for (Room room : apartment.getRooms()) {
+            RoomType tip = room.getType();
+            if (tip != RoomType.BEDROOM && tip != RoomType.LIVING_ROOM && tip != RoomType.KITCHEN) {
+                continue;
+            }
+            double maxDB = tip == RoomType.BEDROOM ? 35.0 : (tip == RoomType.LIVING_ROOM ? 40.0 : 45.0);
+            boolean prihvatljiva = queryHasResult(kSession, "bukaProhvatljiva", room, maxDB, 5);
+            String opis = room.getId() + " [" + tip + ", max=" + (int) maxDB + "dB]";
+            if (prihvatljiva) okSobe.add(opis); else problemSobe.add(opis);
+        }
+
+        boolean sve = problemSobe.isEmpty();
+        BackwardQueryResponse resp = new BackwardQueryResponse(
+            "bukaProhvatljiva", sve,
+            "Izvor buke: " + apartment.getNoiseSource().getName() +
+            " (" + apartment.getNoiseSource().getNoiseLevelDB() + " dB). " +
+            (sve
+                ? "Sve prostorije imaju prihvatljiv nivo buke."
+                : "Problem buke u: " + String.join(", ", problemSobe) + ".")
+        );
+
+        for (String opis : okSobe) {
+            resp.addSubGoal("bukaProhvatljiva", true, "[OK] " + opis);
+        }
+        for (String opis : problemSobe) {
+            resp.addSubGoal("bukaProhvatljiva", false,
+                "[FAIL] " + opis + " — buka prodire iznad dozvoljenog praga");
+        }
+        return resp;
+    }
+
+    // ── UPIT R2: Rekurzivni evakuacioni put ──────────────────────────────────────
+    // Za svaku spavacu sobu, dnevnu sobu i kuhinju proverava
+    // da li postoji bezbedan put do izlaza (max 5 soba u lancu,
+    // svaki prolaz >= 90 cm, hodnici >= 120 cm)
+    private BackwardQueryResponse runEvakuacijaQuery(KieSession kSession, Apartment apartment) {
+        List<String> okSobe = new ArrayList<>();
+        List<String> problemSobe = new ArrayList<>();
+
+        for (Room room : apartment.getRooms()) {
+            RoomType tip = room.getType();
+            if (tip == RoomType.HALLWAY || tip == RoomType.ENTRANCE_LOBBY
+                    || tip == RoomType.BALCONY || tip == RoomType.LOGGIA) {
+                continue;
+            }
+            boolean izlaz = queryHasResult(kSession, "imaBezbedanIzlaz", room, 5);
+            String opis = room.getId() + " [" + tip + "]";
+            if (izlaz) okSobe.add(opis); else problemSobe.add(opis);
+        }
+
+        boolean sve = problemSobe.isEmpty();
+        BackwardQueryResponse resp = new BackwardQueryResponse(
+            "imaBezbedanIzlaz", sve,
+            sve
+                ? "Sve prostorije imaju bezbedan evakuacioni put."
+                : "Prostorije bez bezbednog izlaza: " + String.join(", ", problemSobe) + "."
+        );
+
+        for (String opis : okSobe) {
+            resp.addSubGoal("imaBezbedanIzlaz", true, "[OK] " + opis + " — put do izlaza postoji");
+        }
+        for (String opis : problemSobe) {
+            resp.addSubGoal("imaBezbedanIzlaz", false,
+                "[FAIL] " + opis + " — nije pronadjen bezbedan evakuacioni put");
+        }
         return resp;
     }
 

@@ -8,8 +8,10 @@ import {
   BuildingType,
   BuyerProfile,
   BuyerProfileType,
+  NoiseSource,
   Orientation,
   Room,
+  RoomConnection,
   RoomType,
   createDefaultApartment,
   createDefaultBuilding,
@@ -17,6 +19,7 @@ import {
   createDefaultDeadArea,
   createDefaultKitchenWall,
   createDefaultRoom,
+  createDefaultRoomConnection,
   createDefaultWindow,
 } from '../../models/apartment.models';
 import { ApartmentService } from '../../services/apartment.service';
@@ -33,6 +36,7 @@ export class EvaluatorComponent {
   readonly totalSteps = 7;
   isLoading = false;
   error: string | null = null;
+  noiseSourceEnabled = false;
 
   apartment: Apartment = createDefaultApartment();
   building: Building = createDefaultBuilding();
@@ -121,6 +125,25 @@ export class EvaluatorComponent {
 
   removeDeadArea(index: number) {
     this.apartment.deadAreas.splice(index, 1);
+  }
+
+  addRoomConnection() {
+    if (!this.apartment.roomConnections) this.apartment.roomConnections = [];
+    const idA = this.apartment.rooms[0]?.id ?? '';
+    const idB = this.apartment.rooms[1]?.id ?? '';
+    this.apartment.roomConnections.push(createDefaultRoomConnection(idA, idB));
+  }
+
+  removeRoomConnection(index: number) {
+    this.apartment.roomConnections?.splice(index, 1);
+  }
+
+  onNoiseSourceToggle(enabled: boolean) {
+    if (enabled) {
+      this.apartment.noiseSource = this.apartment.noiseSource ?? { name: 'Prometna ulica', noiseLevelDB: 70 };
+    } else {
+      delete this.apartment.noiseSource;
+    }
   }
 
   updateRoomArea(i: number) {
@@ -454,6 +477,119 @@ export class EvaluatorComponent {
         numberOfChildren: 3, hasMixedGenderChildren: true, youngestChildAge: 12,
       },
     },
+    // ── TEST 9 — Rekurzivni backward: buka ────────────────────────────────────
+    // Dnevna soba gleda na bulevar (72 dB), izolacija zida 30 dB → 42 dB u sobi.
+    // Spavaća soba: 42 - 15 (hodnik) - 20 (soba vrata) = 7 dB ≤ 35 dB → OK
+    // Dnevna soba: 42 dB > 40 dB → PROBLEM (rekurzija ne pronalazi put)
+    // Kuhinja: 42 - 15 (hodnik) = 27 dB ≤ 45 dB → OK
+    {
+      label: 'Test 9 — Backward: buka uz prometnu ulicu',
+      queryName: 'bukaProhvatljiva',
+      apartment: {
+        id: 'apt-buka1', floor: 3, terraceRailingHeightCm: 110, cornerApartment: false,
+        topFloor: false, roofInsulated: true, crossVentilation: false,
+        structure: ApartmentStructure.TWO_ROOM,
+        totalNetUsableArea: 55.0, hasElectricalInstallation: true, hasWaterInstallation: true,
+        heatingType: 'CENTRAL', openConceptLivingKitchen: false,
+        noiseSource: { name: 'Bulevar Despota Stefana', noiseLevelDB: 72 },
+        rooms: [
+          { id: 'r-dnevna',  type: RoomType.LIVING_ROOM, length: 5.0, width: 4.0, clearHeight: 2.7, area: 20.0, totalGlazedArea: 2.52, bedroomCapacity: 0, walkThrough: false, hasMechanicalVentilation: false, facesNoisyStreet: true,  wallInsulationDB: 30, hasDirectExit: false, doorWidthCm: 90 },
+          { id: 'r-hodnik',  type: RoomType.HALLWAY,     length: 3.0, width: 1.3, clearHeight: 2.7, area:  3.9, totalGlazedArea: 0,    bedroomCapacity: 0, walkThrough: false, hasMechanicalVentilation: false, facesNoisyStreet: false, wallInsulationDB: 0,  hasDirectExit: false, doorWidthCm: 90 },
+          { id: 'r-spavaca', type: RoomType.BEDROOM,     length: 4.0, width: 3.5, clearHeight: 2.7, area: 14.0, totalGlazedArea: 2.10, bedroomCapacity: 2, walkThrough: false, hasMechanicalVentilation: false, facesNoisyStreet: false, wallInsulationDB: 0,  hasDirectExit: false, doorWidthCm: 90 },
+          { id: 'r-kuhinja', type: RoomType.KITCHEN,     length: 3.5, width: 3.0, clearHeight: 2.7, area: 10.5, totalGlazedArea: 1.44, bedroomCapacity: 0, walkThrough: false, hasMechanicalVentilation: false, facesNoisyStreet: false, wallInsulationDB: 0,  hasDirectExit: false, doorWidthCm: 90 },
+          { id: 'r-kupatilo',type: RoomType.BATHROOM,    length: 2.5, width: 2.0, clearHeight: 2.7, area:  5.0, totalGlazedArea: 0,    bedroomCapacity: 0, walkThrough: false, hasMechanicalVentilation: true,  facesNoisyStreet: false, wallInsulationDB: 0,  hasDirectExit: false, doorWidthCm: 90 },
+        ],
+        windows: [
+          { roomId: 'r-dnevna',  width: 1.8, height: 1.4, parapetHeight: 0.85, orientation: Orientation.NORTH, glazedArea: 2.52 },
+          { roomId: 'r-spavaca', width: 1.5, height: 1.4, parapetHeight: 0.90, orientation: Orientation.SOUTH, glazedArea: 2.10 },
+          { roomId: 'r-kuhinja', width: 1.2, height: 1.2, parapetHeight: 0.90, orientation: Orientation.SOUTH, glazedArea: 1.44 },
+        ],
+        kitchenWalls: [
+          { id: 'kw1', roomId: 'r-kuhinja', lengthCm: 240, modular60: true, modular30: false, nonModular: false },
+        ],
+        deadAreas: [],
+        // Veze za backward chaining buke (smer: od izolovane sobe ka bučnoj)
+        // spavaća→hodnik→dnevna i kuhinja→hodnik→dnevna
+        roomConnections: [
+          { roomIdA: 'r-spavaca', roomIdB: 'r-hodnik',  doorWidthCm: 95, lockedDoors: false, doorInsulationDB: 20 },
+          { roomIdA: 'r-hodnik',  roomIdB: 'r-dnevna',  doorWidthCm: 90, lockedDoors: false, doorInsulationDB: 15 },
+          { roomIdA: 'r-kuhinja', roomIdB: 'r-hodnik',  doorWidthCm: 90, lockedDoors: false, doorInsulationDB: 15 },
+        ],
+      },
+      building: {
+        id: 'bld-buka1', aboveGroundFloors: 5, hasElevator: true, elevatorCabinLengthCm: 140,
+        elevatorCabinWidthCm: 110, elevatorDoorWidthCm: 90, totalApartments: 20,
+        windbreakWidthCm: 140, corridorWidthCm: 150, staircaseWidthCm: 130, stairTreadCm: 28,
+        stairRiserCm: 17, buildingType: BuildingType.STANDARD, hasUsagePermit: true, energyClass: 'B',
+        hasParking: false, parkingWidthCm: 0, parkingLengthCm: 0, parkingType: 'OPEN', garageHeightCm: 0,
+        hasRamp: false, rampSlopePercent: 0, rampWidthCm: 0, hasRampRestingPlatforms: false,
+        accessible: false, stepsAtEntrance: 0, hasHandrailsOnStairs: true, entryDoorWidthCm: 100,
+      },
+      buyerProfile: {
+        id: 'bp-buka1', type: BuyerProfileType.COUPLE, numberOfOccupants: 2, hasChildren: false,
+        hasElderlyOrDisabled: false, maxBudgetEur: 120000, needsParking: false,
+        prioritizesNaturalLight: true, prioritizesQuiet: true, acceptsRenovation: false,
+        numberOfChildren: 0, hasMixedGenderChildren: false, youngestChildAge: 99,
+      },
+    },
+    // ── TEST 10 — Rekurzivni backward: evakuacioni put ────────────────────────
+    // Predsoblje ima direktan izlaz. Sve sobe vode kroz hodnik do predsoblja.
+    // Izuzetak: spavaća2 ima BLOKIRAN prolaz prema hodniku → nema bezbedan izlaz.
+    {
+      label: 'Test 10 — Backward: evakuacioni put (jedna soba blokirana)',
+      queryName: 'imaBezbedanIzlaz',
+      apartment: {
+        id: 'apt-evak1', floor: 4, terraceRailingHeightCm: 110, cornerApartment: false,
+        topFloor: false, roofInsulated: true, crossVentilation: false,
+        structure: ApartmentStructure.THREE_ROOM,
+        totalNetUsableArea: 72.0, hasElectricalInstallation: true, hasWaterInstallation: true,
+        heatingType: 'CENTRAL', openConceptLivingKitchen: false,
+        rooms: [
+          { id: 'r-predsoblje', type: RoomType.ENTRANCE_LOBBY, length: 2.0, width: 2.0, clearHeight: 2.7, area: 4.0,  totalGlazedArea: 0,    bedroomCapacity: 0, walkThrough: false, hasMechanicalVentilation: false, facesNoisyStreet: false, hasDirectExit: true,  doorWidthCm: 100, wallInsulationDB: 0 },
+          { id: 'r-hodnik',     type: RoomType.HALLWAY,        length: 4.0, width: 1.3, clearHeight: 2.7, area: 5.2,  totalGlazedArea: 0,    bedroomCapacity: 0, walkThrough: false, hasMechanicalVentilation: false, facesNoisyStreet: false, hasDirectExit: false, doorWidthCm: 90,  wallInsulationDB: 0 },
+          { id: 'r-dnevna',    type: RoomType.LIVING_ROOM,     length: 5.5, width: 4.5, clearHeight: 2.7, area: 24.75,totalGlazedArea: 3.5,  bedroomCapacity: 0, walkThrough: false, hasMechanicalVentilation: false, facesNoisyStreet: false, hasDirectExit: false, doorWidthCm: 90,  wallInsulationDB: 0 },
+          { id: 'r-spavaca1',  type: RoomType.BEDROOM,         length: 4.0, width: 3.5, clearHeight: 2.7, area: 14.0, totalGlazedArea: 2.10, bedroomCapacity: 2, walkThrough: false, hasMechanicalVentilation: false, facesNoisyStreet: false, hasDirectExit: false, doorWidthCm: 90,  wallInsulationDB: 0 },
+          { id: 'r-spavaca2',  type: RoomType.BEDROOM,         length: 3.5, width: 3.0, clearHeight: 2.7, area: 10.5, totalGlazedArea: 2.10, bedroomCapacity: 1, walkThrough: false, hasMechanicalVentilation: false, facesNoisyStreet: false, hasDirectExit: false, doorWidthCm: 90,  wallInsulationDB: 0 },
+          { id: 'r-kuhinja',   type: RoomType.KITCHEN,         length: 3.5, width: 3.0, clearHeight: 2.7, area: 10.5, totalGlazedArea: 1.44, bedroomCapacity: 0, walkThrough: false, hasMechanicalVentilation: false, facesNoisyStreet: false, hasDirectExit: false, doorWidthCm: 90,  wallInsulationDB: 0 },
+          { id: 'r-kupatilo',  type: RoomType.BATHROOM,        length: 2.5, width: 2.0, clearHeight: 2.7, area: 5.0,  totalGlazedArea: 0,    bedroomCapacity: 0, walkThrough: false, hasMechanicalVentilation: true,  facesNoisyStreet: false, hasDirectExit: false, doorWidthCm: 90,  wallInsulationDB: 0 },
+        ],
+        windows: [
+          { roomId: 'r-dnevna',   width: 2.0, height: 1.5, parapetHeight: 0.9, orientation: Orientation.SOUTH, glazedArea: 3.0  },
+          { roomId: 'r-spavaca1', width: 1.5, height: 1.4, parapetHeight: 0.9, orientation: Orientation.EAST,  glazedArea: 2.10 },
+          { roomId: 'r-spavaca2', width: 1.5, height: 1.4, parapetHeight: 0.9, orientation: Orientation.EAST,  glazedArea: 2.10 },
+          { roomId: 'r-kuhinja',  width: 1.2, height: 1.2, parapetHeight: 0.9, orientation: Orientation.WEST,  glazedArea: 1.44 },
+        ],
+        kitchenWalls: [
+          { id: 'kw1', roomId: 'r-kuhinja', lengthCm: 240, modular60: true, modular30: false, nonModular: false },
+        ],
+        deadAreas: [],
+        // Veze za evakuaciju (smer: od sobe prema izlazu)
+        // spavaća2 ima BLOKIRAN prolaz → neće imati bezbedan izlaz
+        roomConnections: [
+          { roomIdA: 'r-hodnik',    roomIdB: 'r-predsoblje', doorWidthCm: 100, lockedDoors: false, doorInsulationDB: 10 },
+          { roomIdA: 'r-dnevna',    roomIdB: 'r-hodnik',     doorWidthCm: 100, lockedDoors: false, doorInsulationDB: 15 },
+          { roomIdA: 'r-spavaca1',  roomIdB: 'r-hodnik',     doorWidthCm: 95,  lockedDoors: false, doorInsulationDB: 20 },
+          { roomIdA: 'r-spavaca2',  roomIdB: 'r-hodnik',     doorWidthCm: 90,  lockedDoors: true,  doorInsulationDB: 20 },
+          { roomIdA: 'r-kuhinja',   roomIdB: 'r-hodnik',     doorWidthCm: 90,  lockedDoors: false, doorInsulationDB: 15 },
+          { roomIdA: 'r-kupatilo',  roomIdB: 'r-hodnik',     doorWidthCm: 90,  lockedDoors: false, doorInsulationDB: 20 },
+        ],
+      },
+      building: {
+        id: 'bld-evak1', aboveGroundFloors: 6, hasElevator: true, elevatorCabinLengthCm: 140,
+        elevatorCabinWidthCm: 110, elevatorDoorWidthCm: 90, totalApartments: 24,
+        windbreakWidthCm: 150, corridorWidthCm: 160, staircaseWidthCm: 130, stairTreadCm: 28,
+        stairRiserCm: 17, buildingType: BuildingType.STANDARD, hasUsagePermit: true, energyClass: 'B',
+        hasParking: false, parkingWidthCm: 0, parkingLengthCm: 0, parkingType: 'OPEN', garageHeightCm: 0,
+        hasRamp: false, rampSlopePercent: 0, rampWidthCm: 0, hasRampRestingPlatforms: false,
+        accessible: false, stepsAtEntrance: 0, hasHandrailsOnStairs: true, entryDoorWidthCm: 100,
+      },
+      buyerProfile: {
+        id: 'bp-evak1', type: BuyerProfileType.FAMILY, numberOfOccupants: 4, hasChildren: true,
+        hasElderlyOrDisabled: false, maxBudgetEur: 140000, needsParking: false,
+        prioritizesNaturalLight: true, prioritizesQuiet: false, acceptsRenovation: false,
+        numberOfChildren: 2, hasMixedGenderChildren: false, youngestChildAge: 7,
+      },
+    },
   ];
 
   loadTestData() {
@@ -461,6 +597,8 @@ export class EvaluatorComponent {
     this.apartment    = JSON.parse(JSON.stringify(tc.apartment));
     this.building     = JSON.parse(JSON.stringify(tc.building));
     this.buyerProfile = JSON.parse(JSON.stringify(tc.buyerProfile));
+    if (!this.apartment.roomConnections) this.apartment.roomConnections = [];
+    this.noiseSourceEnabled = !!this.apartment.noiseSource;
     if (tc.queryName) {
       this.selectedQuery = tc.queryName;
     }
